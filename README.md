@@ -11,7 +11,7 @@ Live: https://kerubi-5.github.io/control-center-v2/
 - `versions/<id>.json` — AES-GCM encrypted sketch payloads
 - `scripts/encrypt-version.mjs` — helper to add a new encrypted version
 
-Clients pick a version from the top bar. **What's new** shows plain-language release notes.
+Clients pick a version from the top bar. **What's new** shows plain-language release notes. **Compare** opens a side-by-side view of two versions (with optional synced scrolling) so non-technical clients can see UI changes themselves.
 
 ## Add a new version (e.g. 2.6)
 

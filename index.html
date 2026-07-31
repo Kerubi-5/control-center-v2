@@ -17,6 +17,7 @@
       --error-color: #f85149;
       --link: #58a6ff;
       --bar-height: 52px;
+      --compare-label-height: 36px;
     }
 
     * { box-sizing: border-box; }
@@ -140,7 +141,7 @@
     .topbar {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       padding: 0 14px;
       height: var(--bar-height);
       border-bottom: 1px solid var(--border-color);
@@ -177,17 +178,29 @@
       white-space: nowrap;
     }
 
-    #version-select {
+    .topbar select {
       background: var(--input-bg);
       color: #f0f6fc;
       border: 1px solid var(--border-color);
       border-radius: 6px;
       padding: 7px 10px;
       font-size: 13px;
-      min-width: 110px;
+      min-width: 100px;
     }
 
-    .bar-btn, .bar-link {
+    .single-controls { display: flex; align-items: center; gap: 10px; }
+    .compare-controls {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    body.compare-mode .single-controls { display: none; }
+    body.compare-mode .compare-controls { display: flex; }
+    body.compare-mode .latest-pill { display: none !important; }
+
+    .bar-btn {
       appearance: none;
       background: transparent;
       color: var(--link);
@@ -196,18 +209,29 @@
       padding: 7px 10px;
       font-size: 12px;
       font-weight: 600;
-      text-decoration: none;
       cursor: pointer;
       white-space: nowrap;
     }
 
-    .bar-btn:hover, .bar-link:hover {
-      background: rgba(88, 166, 255, 0.1);
+    .bar-btn:hover { background: rgba(88, 166, 255, 0.1); }
+    .bar-btn.active {
+      background: rgba(88, 166, 255, 0.18);
+      border-color: rgba(88, 166, 255, 0.45);
     }
 
-    .bar-link[aria-disabled="true"] {
-      opacity: 0.45;
-      pointer-events: none;
+    .sync-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .sync-label input {
+      margin: 0;
     }
 
     .viewer-wrap {
@@ -217,12 +241,64 @@
       background: #fff;
     }
 
-    #viewer {
+    #viewer-single {
       width: 100%;
       height: 100%;
       border: 0;
       display: block;
       background: #fff;
+    }
+
+    body.compare-mode #viewer-single { display: none; }
+
+    .compare-grid {
+      display: none;
+      height: 100%;
+      grid-template-columns: 1fr 1fr;
+      min-height: 0;
+    }
+
+    body.compare-mode .compare-grid { display: grid; }
+
+    .compare-pane {
+      display: grid;
+      grid-template-rows: var(--compare-label-height) 1fr;
+      min-width: 0;
+      min-height: 0;
+      border-right: 1px solid var(--border-color);
+      background: #fff;
+    }
+
+    .compare-pane:last-child { border-right: 0; }
+
+    .compare-pane-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+      background: #f6f8fa;
+      border-bottom: 1px solid #d0d7de;
+      color: #24292f;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .compare-pane-label .tag {
+      font-size: 11px;
+      font-weight: 600;
+      color: #57606a;
+      background: #eaeef2;
+      border-radius: 999px;
+      padding: 2px 8px;
+    }
+
+    .compare-pane iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+      background: #fff;
+      min-height: 0;
     }
 
     .status {
@@ -276,9 +352,15 @@
 
     .notes-panel li { margin-bottom: 4px; }
 
-    @media (max-width: 720px) {
+    @media (max-width: 900px) {
+      body.compare-mode .compare-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr 1fr;
+      }
+      .compare-pane { border-right: 0; border-bottom: 1px solid var(--border-color); }
+      .compare-pane:last-child { border-bottom: 0; }
       .brand-text { display: none; }
-      .topbar { gap: 8px; padding: 0 10px; }
+      .topbar { gap: 8px; padding: 0 10px; overflow-x: auto; }
     }
   </style>
 </head>
@@ -300,14 +382,40 @@
       <div class="brand"><span class="brand-text">Control Center</span></div>
       <span class="latest-pill" id="latest-pill">Latest</span>
       <div class="spacer"></div>
-      <label for="version-select">Version</label>
-      <select id="version-select" aria-label="Select sketch version"></select>
+
+      <div class="single-controls">
+        <label for="version-select">Version</label>
+        <select id="version-select" aria-label="Select sketch version"></select>
+      </div>
+
+      <div class="compare-controls" aria-label="Compare versions">
+        <label for="compare-left">Left</label>
+        <select id="compare-left" aria-label="Left version"></select>
+        <label for="compare-right">Right</label>
+        <select id="compare-right" aria-label="Right version"></select>
+        <label class="sync-label" title="Keep both sides scrolling together">
+          <input type="checkbox" id="sync-scroll" checked>
+          Sync scroll
+        </label>
+      </div>
+
+      <button class="bar-btn" id="compare-btn" type="button" aria-pressed="false">Compare</button>
       <button class="bar-btn" id="notes-btn" type="button" aria-expanded="false">What's new</button>
     </header>
 
     <div class="viewer-wrap">
       <div class="status" id="status">Loading version…</div>
-      <iframe id="viewer" title="Control Center sketch" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"></iframe>
+      <iframe id="viewer-single" title="Control Center sketch" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"></iframe>
+      <div class="compare-grid" id="compare-grid">
+        <div class="compare-pane">
+          <div class="compare-pane-label"><span id="compare-left-label">Earlier</span><span class="tag">Before</span></div>
+          <iframe id="viewer-left" title="Earlier version" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"></iframe>
+        </div>
+        <div class="compare-pane">
+          <div class="compare-pane-label"><span id="compare-right-label">Later</span><span class="tag">After</span></div>
+          <iframe id="viewer-right" title="Later version" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"></iframe>
+        </div>
+      </div>
     </div>
 
     <aside class="notes-panel" id="notes-panel" hidden>
@@ -329,6 +437,12 @@
 
     const ui = {
       select: document.getElementById("version-select"),
+      compareLeft: document.getElementById("compare-left"),
+      compareRight: document.getElementById("compare-right"),
+      compareLeftLabel: document.getElementById("compare-left-label"),
+      compareRightLabel: document.getElementById("compare-right-label"),
+      compareBtn: document.getElementById("compare-btn"),
+      syncScroll: document.getElementById("sync-scroll"),
       latestPill: document.getElementById("latest-pill"),
       notesBtn: document.getElementById("notes-btn"),
       notesPanel: document.getElementById("notes-panel"),
@@ -336,15 +450,21 @@
       notesMeta: document.getElementById("notes-meta"),
       notesList: document.getElementById("notes-list"),
       status: document.getElementById("status"),
-      viewer: document.getElementById("viewer"),
+      viewer: document.getElementById("viewer-single"),
+      viewerLeft: document.getElementById("viewer-left"),
+      viewerRight: document.getElementById("viewer-right"),
     };
 
-    /** @type {{ latest: string, github: { owner: string, repo: string }, versions: Array<any> } | null} */
+    /** @type {{ latest: string, versions: Array<any> } | null} */
     let manifest = null;
     /** @type {string | null} */
     let activeId = null;
     /** @type {string | null} */
     let sessionPassword = null;
+    let compareMode = false;
+    /** @type {Record<string, string>} */
+    const blobCache = {};
+    let syncingScroll = false;
 
     /**
      * Decode a base64 string into bytes for Web Crypto.
@@ -413,6 +533,18 @@
     }
 
     /**
+     * Versions sorted newest-first for dropdowns.
+     * @returns {Array<any>}
+     */
+    function orderedVersions() {
+      return [...manifest.versions].sort((a, b) => {
+        if (a.id === manifest.latest) return -1;
+        if (b.id === manifest.latest) return 1;
+        return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
+      });
+    }
+
+    /**
      * Prefer ?v=, else latest from the manifest.
      * @returns {string}
      */
@@ -422,33 +554,65 @@
       return manifest.latest;
     }
 
-    function fillVersionSelect() {
-      ui.select.innerHTML = "";
-      // Newest first for the dropdown.
-      const ordered = [...manifest.versions].sort((a, b) => {
-        if (a.id === manifest.latest) return -1;
-        if (b.id === manifest.latest) return 1;
-        return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
-      });
+    /**
+     * Default compare pair: previous version vs latest (or active).
+     * @returns {[string, string]}
+     */
+    function defaultComparePair() {
+      const orderedAsc = [...manifest.versions].sort((a, b) =>
+        String(a.id).localeCompare(String(b.id), undefined, { numeric: true })
+      );
+      const right =
+        (params.get("right") && getVersion(params.get("right")) && params.get("right")) ||
+        activeId ||
+        manifest.latest;
+      const rightIdx = orderedAsc.findIndex((v) => v.id === right);
+      const leftFromParam = params.get("left");
+      let left =
+        leftFromParam && getVersion(leftFromParam)
+          ? leftFromParam
+          : rightIdx > 0
+            ? orderedAsc[rightIdx - 1].id
+            : orderedAsc[0].id;
+      if (left === right && orderedAsc.length > 1) {
+        left = orderedAsc[Math.max(0, rightIdx - 1)].id;
+        if (left === right) left = orderedAsc.find((v) => v.id !== right).id;
+      }
+      return [left, right];
+    }
 
-      for (const version of ordered) {
+    /**
+     * @param {HTMLSelectElement} select
+     * @param {string} [selectedId]
+     */
+    function fillSelect(select, selectedId) {
+      select.innerHTML = "";
+      for (const version of orderedVersions()) {
         const opt = document.createElement("option");
         opt.value = version.id;
         opt.textContent =
           version.id === manifest.latest
             ? `${version.label} (latest)`
             : version.label;
-        ui.select.appendChild(opt);
+        select.appendChild(opt);
       }
+      if (selectedId && getVersion(selectedId)) select.value = selectedId;
+    }
+
+    function fillVersionSelects() {
+      fillSelect(ui.select, activeId || manifest.latest);
+      const [left, right] = defaultComparePair();
+      fillSelect(ui.compareLeft, left);
+      fillSelect(ui.compareRight, right);
     }
 
     /**
-     * Update changelog panel + GitHub compare link for the active version.
+     * Update changelog panel for a version.
      * @param {any} version
      */
     function updateMeta(version) {
       const isLatest = version.id === manifest.latest;
-      ui.latestPill.classList.toggle("show", isLatest);
+      ui.latestPill.classList.toggle("show", !compareMode && isLatest);
       ui.notesTitle.textContent = `${version.label} — What's new`;
       ui.notesMeta.textContent = version.released
         ? `Released ${version.released}`
@@ -467,8 +631,6 @@
           ui.notesList.appendChild(li);
         }
       }
-
-      // GitHub compare intentionally omitted — client-facing shell only.
     }
 
     /**
@@ -534,7 +696,47 @@
     }
 
     /**
-     * Decrypt and render a version into the iframe.
+     * Decrypt a version once and cache a blob URL for iframes.
+     * @param {string} id
+     * @returns {Promise<string>}
+     */
+    async function getBlobUrl(id) {
+      if (blobCache[id]) return blobCache[id];
+      const version = getVersion(id);
+      if (!version) throw new Error(`Unknown version: ${id}`);
+      const html = await materializeVersionHtml(version, sessionPassword);
+      const blob = new Blob([html], { type: "text/html" });
+      const blobUrl = URL.createObjectURL(blob);
+      blobCache[id] = blobUrl;
+      return blobUrl;
+    }
+
+    /**
+     * @param {HTMLIFrameElement} iframe
+     * @param {string} id
+     */
+    async function setIframeVersion(iframe, id) {
+      iframe.src = await getBlobUrl(id);
+    }
+
+    function updateUrl() {
+      const url = new URL(window.location.href);
+      if (compareMode) {
+        url.searchParams.set("mode", "compare");
+        url.searchParams.set("left", ui.compareLeft.value);
+        url.searchParams.set("right", ui.compareRight.value);
+        url.searchParams.delete("v");
+      } else {
+        url.searchParams.delete("mode");
+        url.searchParams.delete("left");
+        url.searchParams.delete("right");
+        if (activeId) url.searchParams.set("v", activeId);
+      }
+      history.replaceState(null, "", url);
+    }
+
+    /**
+     * Decrypt and render a single version.
      * @param {string} id
      */
     async function loadVersion(id) {
@@ -545,24 +747,96 @@
       activeId = id;
       ui.select.value = id;
       updateMeta(version);
-      setStatus(`Decrypting ${version.label}…`, true);
-
-      const html = await materializeVersionHtml(version, sessionPassword);
-
-      // Blob URL keeps the sketch sandboxed while supporting relative assets.
-      if (ui.viewer.dataset.blobUrl) {
-        URL.revokeObjectURL(ui.viewer.dataset.blobUrl);
-      }
-      const blob = new Blob([html], { type: "text/html" });
-      const blobUrl = URL.createObjectURL(blob);
-      ui.viewer.dataset.blobUrl = blobUrl;
-      ui.viewer.src = blobUrl;
-
-      const url = new URL(window.location.href);
-      url.searchParams.set("v", id);
-      history.replaceState(null, "", url);
-
+      setStatus(`Loading ${version.label}…`, true);
+      await setIframeVersion(ui.viewer, id);
+      updateUrl();
       setStatus("", false);
+    }
+
+    /**
+     * Load both compare panes.
+     */
+    async function loadCompare() {
+      const leftId = ui.compareLeft.value;
+      const rightId = ui.compareRight.value;
+      const left = getVersion(leftId);
+      const right = getVersion(rightId);
+      if (!left || !right) throw new Error("Unknown compare versions");
+
+      ui.compareLeftLabel.textContent = left.label;
+      ui.compareRightLabel.textContent = right.label;
+      updateMeta(right);
+      setStatus(`Loading ${left.label} and ${right.label}…`, true);
+
+      await Promise.all([
+        setIframeVersion(ui.viewerLeft, leftId),
+        setIframeVersion(ui.viewerRight, rightId),
+      ]);
+
+      wireSyncScroll();
+      updateUrl();
+      setStatus("", false);
+    }
+
+    /**
+     * Keep both compare iframes scrolling together when enabled.
+     */
+    function wireSyncScroll() {
+      const leftWin = ui.viewerLeft.contentWindow;
+      const rightWin = ui.viewerRight.contentWindow;
+      if (!leftWin || !rightWin) return;
+
+      const onScroll = (source, target) => () => {
+        if (!ui.syncScroll.checked || syncingScroll) return;
+        syncingScroll = true;
+        try {
+          const doc = source.document.documentElement;
+          const maxY = Math.max(1, doc.scrollHeight - source.innerHeight);
+          const maxX = Math.max(1, doc.scrollWidth - source.innerWidth);
+          const ratioY = source.scrollY / maxY;
+          const ratioX = source.scrollX / maxX;
+          const tDoc = target.document.documentElement;
+          target.scrollTo(
+            ratioX * Math.max(1, tDoc.scrollWidth - target.innerWidth),
+            ratioY * Math.max(1, tDoc.scrollHeight - target.innerHeight)
+          );
+        } catch (_) {
+          // Cross-frame access can fail briefly while a blob navigates.
+        }
+        syncingScroll = false;
+      };
+
+      leftWin.onscroll = onScroll(leftWin, rightWin);
+      rightWin.onscroll = onScroll(rightWin, leftWin);
+    }
+
+    /**
+     * @param {boolean} enabled
+     */
+    async function setCompareMode(enabled) {
+      compareMode = enabled;
+      document.body.classList.toggle("compare-mode", enabled);
+      ui.compareBtn.classList.toggle("active", enabled);
+      ui.compareBtn.setAttribute("aria-pressed", String(enabled));
+      ui.compareBtn.textContent = enabled ? "Exit compare" : "Compare";
+
+      if (enabled) {
+        if (manifest.versions.length < 2) {
+          setStatus("Need at least two versions to compare.", true);
+          compareMode = false;
+          document.body.classList.remove("compare-mode");
+          ui.compareBtn.classList.remove("active");
+          ui.compareBtn.setAttribute("aria-pressed", "false");
+          ui.compareBtn.textContent = "Compare";
+          return;
+        }
+        const [left, right] = defaultComparePair();
+        fillSelect(ui.compareLeft, left);
+        fillSelect(ui.compareRight, right);
+        await loadCompare();
+      } else {
+        await loadVersion(activeId || manifest.latest);
+      }
     }
 
     function enterShell() {
@@ -586,15 +860,19 @@
 
         const initialId = resolveInitialVersion();
         const version = getVersion(initialId);
-
-        // Validate password against the encrypted base (patch versions inherit it).
         await materializeVersionHtml(version, password);
 
         sessionPassword = password;
         sessionStorage.setItem(SESSION_KEY, password);
-        fillVersionSelect();
+        activeId = initialId;
+        fillVersionSelects();
         enterShell();
-        await loadVersion(initialId);
+
+        if (params.get("mode") === "compare" && manifest.versions.length > 1) {
+          await setCompareMode(true);
+        } else {
+          await loadVersion(initialId);
+        }
       } catch (err) {
         console.error("Decryption failed:", err);
         gate.error.style.display = "block";
@@ -611,9 +889,14 @@
       try {
         manifest = await (await fetch("versions.json", { cache: "no-store" })).json();
         sessionPassword = saved;
-        fillVersionSelect();
+        activeId = resolveInitialVersion();
+        fillVersionSelects();
         enterShell();
-        await loadVersion(resolveInitialVersion());
+        if (params.get("mode") === "compare" && manifest.versions.length > 1) {
+          await setCompareMode(true);
+        } else {
+          await loadVersion(activeId);
+        }
         return true;
       } catch (err) {
         console.warn("Session resume failed, prompting for password.", err);
@@ -630,6 +913,40 @@
         console.error(err);
         setStatus("Could not load that version. Try unlocking again.", true);
       }
+    });
+
+    ui.compareLeft.addEventListener("change", async () => {
+      try {
+        await loadCompare();
+      } catch (err) {
+        console.error(err);
+        setStatus("Could not load compare view.", true);
+      }
+    });
+
+    ui.compareRight.addEventListener("change", async () => {
+      try {
+        await loadCompare();
+      } catch (err) {
+        console.error(err);
+        setStatus("Could not load compare view.", true);
+      }
+    });
+
+    ui.compareBtn.addEventListener("click", async () => {
+      try {
+        await setCompareMode(!compareMode);
+      } catch (err) {
+        console.error(err);
+        setStatus("Could not open compare view.", true);
+      }
+    });
+
+    ui.viewerLeft.addEventListener("load", () => {
+      if (compareMode) wireSyncScroll();
+    });
+    ui.viewerRight.addEventListener("load", () => {
+      if (compareMode) wireSyncScroll();
     });
 
     ui.notesBtn.addEventListener("click", () => {
