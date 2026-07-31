@@ -303,7 +303,6 @@
       <label for="version-select">Version</label>
       <select id="version-select" aria-label="Select sketch version"></select>
       <button class="bar-btn" id="notes-btn" type="button" aria-expanded="false">What's new</button>
-      <a class="bar-link" id="compare-link" href="#" target="_blank" rel="noopener noreferrer" aria-disabled="true">Git diff</a>
     </header>
 
     <div class="viewer-wrap">
@@ -336,7 +335,6 @@
       notesTitle: document.getElementById("notes-title"),
       notesMeta: document.getElementById("notes-meta"),
       notesList: document.getElementById("notes-list"),
-      compareLink: document.getElementById("compare-link"),
       status: document.getElementById("status"),
       viewer: document.getElementById("viewer"),
     };
@@ -470,23 +468,7 @@
         }
       }
 
-      const idx = manifest.versions.findIndex((v) => v.id === version.id);
-      const previous = idx > 0 ? manifest.versions[idx - 1] : null;
-      const { owner, repo } = manifest.github || {};
-
-      if (previous && previous.tag && version.tag && owner && repo) {
-        ui.compareLink.href = `https://github.com/${owner}/${repo}/compare/${previous.tag}...${version.tag}`;
-        ui.compareLink.setAttribute("aria-disabled", "false");
-        ui.compareLink.title = `Compare ${previous.tag}…${version.tag} on GitHub`;
-      } else if (version.tag && owner && repo) {
-        ui.compareLink.href = `https://github.com/${owner}/${repo}/releases/tag/${version.tag}`;
-        ui.compareLink.setAttribute("aria-disabled", "false");
-        ui.compareLink.title = `Open ${version.tag} on GitHub`;
-      } else {
-        ui.compareLink.href = "#";
-        ui.compareLink.setAttribute("aria-disabled", "true");
-        ui.compareLink.title = "Add a previous tagged version to enable diffs";
-      }
+      // GitHub compare intentionally omitted — client-facing shell only.
     }
 
     /**

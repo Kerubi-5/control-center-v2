@@ -23,10 +23,9 @@
       "released": "2026-07-31",
       "tag": "v2.5",
       "notes": [
-        "Owner Control Centre UI with Job Owner column in the triage table",
-        "Search and sort support Job Owner",
-        "Same access password as v2.4",
-        "Open jobs still show — where the July Open jobs sheet had no Job Owner column"
+        "Same v2.4 layout, with a Job Owner column in the triage table",
+        "Job Owner shows real people names from the Ara vault sales pipeline extract",
+        "Open jobs still show — where that sheet had no Job Owner column"
       ]
     }
   ]
