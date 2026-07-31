@@ -490,6 +490,68 @@
     }
 
     /**
+     * Resolve the encrypted payload path for a version (follows patch bases).
+     * @param {any} version
+     * @returns {any}
+     */
+    function resolveEncryptedVersion(version) {
+      if (version.mode === "patch" && version.base) {
+        const base = getVersion(version.base);
+        if (!base) throw new Error(`Missing base version: ${version.base}`);
+        return base;
+      }
+      return version;
+    }
+
+    /**
+     * Apply find/replace patches from a patch payload onto decrypted HTML.
+     * @param {string} html
+     * @param {{ patches?: Array<{ id?: string, find: string, replace: string }> }} patchPayload
+     * @returns {string}
+     */
+    function applyPatches(html, patchPayload) {
+      let out = html;
+      const patches = Array.isArray(patchPayload.patches) ? patchPayload.patches : [];
+      for (const patch of patches) {
+        if (!patch || typeof patch.find !== "string") {
+          throw new Error(`Invalid patch${patch && patch.id ? ` (${patch.id})` : ""}`);
+        }
+        if (!out.includes(patch.find)) {
+          throw new Error(
+            `Patch did not match encrypted base${patch.id ? `: ${patch.id}` : ""}`
+          );
+        }
+        out = out.replace(patch.find, patch.replace);
+      }
+      return out;
+    }
+
+    /**
+     * Fetch + decrypt a version, applying patches when mode=patch.
+     * @param {any} version
+     * @param {string} password
+     * @returns {Promise<string>}
+     */
+    async function materializeVersionHtml(version, password) {
+      const encryptedVersion = resolveEncryptedVersion(version);
+      const encryptedRes = await fetch(encryptedVersion.payload, { cache: "no-store" });
+      if (!encryptedRes.ok) {
+        throw new Error(`Failed to fetch ${encryptedVersion.payload}`);
+      }
+      const encryptedPayload = await encryptedRes.json();
+      let html = await decryptPayload(encryptedPayload, password);
+
+      if (version.mode === "patch") {
+        const patchRes = await fetch(version.payload, { cache: "no-store" });
+        if (!patchRes.ok) throw new Error(`Failed to fetch ${version.payload}`);
+        const patchPayload = await patchRes.json();
+        html = applyPatches(html, patchPayload);
+      }
+
+      return html;
+    }
+
+    /**
      * Decrypt and render a version into the iframe.
      * @param {string} id
      */
@@ -503,10 +565,7 @@
       updateMeta(version);
       setStatus(`Decrypting ${version.label}…`, true);
 
-      const response = await fetch(version.payload, { cache: "no-store" });
-      if (!response.ok) throw new Error(`Failed to fetch ${version.payload}`);
-      const payload = await response.json();
-      const html = await decryptPayload(payload, sessionPassword);
+      const html = await materializeVersionHtml(version, sessionPassword);
 
       // Blob URL keeps the sketch sandboxed while supporting relative assets.
       if (ui.viewer.dataset.blobUrl) {
@@ -545,10 +604,9 @@
 
         const initialId = resolveInitialVersion();
         const version = getVersion(initialId);
-        const payload = await (await fetch(version.payload, { cache: "no-store" })).json();
 
-        // Validate password against the selected/latest payload before entering the shell.
-        await decryptPayload(payload, password);
+        // Validate password against the encrypted base (patch versions inherit it).
+        await materializeVersionHtml(version, password);
 
         sessionPassword = password;
         sessionStorage.setItem(SESSION_KEY, password);

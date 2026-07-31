@@ -1,5 +1,5 @@
 {
-  "latest": "2.4",
+  "latest": "2.5",
   "github": {
     "owner": "Kerubi-5",
     "repo": "control-center-v2"
@@ -14,6 +14,20 @@
       "notes": [
         "Initial Control Center v2.4 sketch",
         "AES password protection enabled"
+      ]
+    },
+    {
+      "id": "2.5",
+      "label": "v2.5",
+      "payload": "versions/2.5.json",
+      "mode": "patch",
+      "base": "2.4",
+      "released": "2026-07-31",
+      "tag": "v2.5",
+      "notes": [
+        "Job Owner column added to the triage table (from Quote Owner / Job Owner in the Ara vault extract)",
+        "Search and sort support Job Owner",
+        "Open jobs still show — where the July Open jobs sheet had no Job Owner column"
       ]
     }
   ]

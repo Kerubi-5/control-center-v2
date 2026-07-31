@@ -1,0 +1,47 @@
+{
+  "id": "2.5",
+  "base": "2.4",
+  "mode": "patch",
+  "patches": [
+    {
+      "id": "title",
+      "find": "<title>Alba Operations Control Center</title>",
+      "replace": "<title>Alba Operations Control Center · v2.5</title>"
+    },
+    {
+      "id": "hero",
+      "find": "    <div class=\"eyebrow\">Alba Facilities Management &middot; Sales &amp; Revenue Engagement</div>\n    <h1>Operations Control Center</h1>\n    <div class=\"version-line\">Thin prototype V2.4</div>",
+      "replace": "    <div class=\"eyebrow\">Alba Facilities Management &middot; Sales &amp; Revenue Engagement &middot; v2.5</div>\n    <h1>Operations Control Center</h1>\n    <div class=\"version-line\">Thin prototype V2.5 — Job Owner listed in triage</div>"
+    },
+    {
+      "id": "sort-options",
+      "find": "        <option value=\"score-desc\">Sort: Priority score (high&rarr;low)</option>\n        <option value=\"value-desc\">Sort: Value (high&rarr;low)</option>\n        <option value=\"age-desc\">Sort: Age (oldest first)</option>\n        <option value=\"age-asc\">Sort: Age (newest first)</option>",
+      "replace": "        <option value=\"score-desc\">Sort: Priority score (high&rarr;low)</option>\n        <option value=\"value-desc\">Sort: Value (high&rarr;low)</option>\n        <option value=\"age-desc\">Sort: Age (oldest first)</option>\n        <option value=\"age-asc\">Sort: Age (newest first)</option>\n        <option value=\"owner-asc\">Sort: Job Owner (A&rarr;Z)</option>"
+    },
+    {
+      "id": "table-header",
+      "find": "        <colgroup>\n          <col style=\"width:9%\">\n          <col style=\"width:8%\">\n          <col style=\"width:13%\">\n          <col style=\"width:38%\">\n          <col style=\"width:11%\">\n          <col style=\"width:9%\">\n          <col style=\"width:12%\">\n        </colgroup>\n        <thead>\n          <tr>\n            <th data-key=\"type\">Type</th>\n            <th data-key=\"ref\">Ref</th>\n            <th data-key=\"customer\">Customer</th>\n            <th data-key=\"desc\">Description</th>\n            <th data-key=\"value\" class=\"num\">Value</th>\n            <th data-key=\"age_days\" class=\"num\">Age (d)</th>\n            <th data-key=\"score\">Score</th>\n          </tr>\n        </thead>",
+      "replace": "        <colgroup>\n          <col style=\"width:9%\">\n          <col style=\"width:8%\">\n          <col style=\"width:12%\">\n          <col style=\"width:11%\">\n          <col style=\"width:32%\">\n          <col style=\"width:10%\">\n          <col style=\"width:8%\">\n          <col style=\"width:10%\">\n        </colgroup>\n        <thead>\n          <tr>\n            <th data-key=\"type\">Type</th>\n            <th data-key=\"ref\">Ref</th>\n            <th data-key=\"customer\">Customer</th>\n            <th data-key=\"owner\">Job Owner</th>\n            <th data-key=\"desc\">Description</th>\n            <th data-key=\"value\" class=\"num\">Value</th>\n            <th data-key=\"age_days\" class=\"num\">Age (d)</th>\n            <th data-key=\"score\">Score</th>\n          </tr>\n        </thead>"
+    },
+    {
+      "id": "footnote",
+      "find": "      Source: Sales_Pipeline_20_7_26_anonymized.ods &mdash; Outstanding quotes (332), Open jobs (339), Awaiting PO (27), Quotes upgraded not booked in (21).",
+      "replace": "      Source: Sales_Pipeline_20_7_26_anonymized.ods &mdash; Outstanding quotes (332), Open jobs (339), Awaiting PO (27), Quotes upgraded not booked in (21).\n      <strong>Job Owner</strong> comes from Quote Owner / Job Owner in the Ara vault extract. Open jobs in the July sheet had no Job Owner column, so those rows show &mdash;."
+    },
+    {
+      "id": "filter-sort",
+      "find": "  if (state.search) {\n    out = out.filter(i => (i.ref+' '+i.customer+' '+i.desc).toLowerCase().includes(state.search));\n  }\n  if (state.types.size) out = out.filter(i => state.types.has(i.type));\n  if (state.flags.size) out = out.filter(i => {\n    const fl = (i.flag||'').split(',').filter(Boolean);\n    return fl.some(f => state.flags.has(f));\n  });\n  const [key,dir] = state.sort.split('-');\n  const mult = dir === 'asc' ? 1 : -1;\n  out = [...out].sort((a,b) => {\n    let av = key==='score'?a.score:key==='value'?a.value:(a.age_days??-1);\n    let bv = key==='score'?b.score:key==='value'?b.value:(b.age_days??-1);\n    return (av-bv)*mult;\n  });\n  return out;\n}",
+      "replace": "  if (state.search) {\n    out = out.filter(i => (i.ref+' '+i.customer+' '+(i.owner||'')+' '+i.desc).toLowerCase().includes(state.search));\n  }\n  if (state.types.size) out = out.filter(i => state.types.has(i.type));\n  if (state.flags.size) out = out.filter(i => {\n    const fl = (i.flag||'').split(',').filter(Boolean);\n    return fl.some(f => state.flags.has(f));\n  });\n  const [key,dir] = state.sort.split('-');\n  const mult = dir === 'asc' ? 1 : -1;\n  out = [...out].sort((a,b) => {\n    if (key === 'owner') {\n      const av = (a.owner || '').toLowerCase();\n      const bv = (b.owner || '').toLowerCase();\n      if (av === bv) return 0;\n      if (!av) return 1;\n      if (!bv) return -1;\n      return av < bv ? -1 * mult : 1 * mult;\n    }\n    let av = key==='score'?a.score:key==='value'?a.value:(a.age_days??-1);\n    let bv = key==='score'?b.score:key==='value'?b.value:(b.age_days??-1);\n    return (av-bv)*mult;\n  });\n  return out;\n}"
+    },
+    {
+      "id": "render-row",
+      "find": "    tr.innerHTML = `\n      <td><span class=\"type-pill ${typeClass}\">${it.type}</span></td>\n      <td>${it.ref}</td>\n      <td>${it.customer}</td>\n      <td class=\"desc\">${it.desc}${flags.length ? '<div style=\"margin-top:4px\">'+flags.map(f=>`<span class=\"flag-pill\">${f}</span>`).join('')+'</div>' : ''}</td>\n      <td class=\"num\">${money(it.value)}</td>\n      <td class=\"num\">${it.age_days ?? '&mdash;'}</td>\n      <td><span class=\"score-bar-track\"><span class=\"score-bar-fill\" style=\"width:${it.score}%;background:${scoreColor(it.score)}\"></span></span><span class=\"score-num\" style=\"color:${scoreColor(it.score)}\">${it.score}</span></td>\n    `;\n    tr.addEventListener('click', () => {\n      const next = tr.nextElementSibling;\n      if (next && next.classList.contains('desc-full-row')) { next.remove(); return; }\n      document.querySelectorAll('.desc-full-row').forEach(r=>r.remove());\n      const detailRow = document.createElement('tr');\n      detailRow.className = 'desc-full-row';\n      detailRow.innerHTML = `<td colspan=\"7\" class=\"desc-full open\">${formatDesc(it.desc_full || it.desc)}${it.status ? ` <br><br><strong>Status:</strong> ${it.status}` : ''}${it.owner ? ` &nbsp; <strong>Owner:</strong> ${it.owner}` : ''}</td>`;\n      tr.after(detailRow);\n    });\n",
+      "replace": "    tr.innerHTML = `\n      <td><span class=\"type-pill ${typeClass}\">${it.type}</span></td>\n      <td>${it.ref}</td>\n      <td>${it.customer}</td>\n      <td>${it.owner ? it.owner : '&mdash;'}</td>\n      <td class=\"desc\">${it.desc}${flags.length ? '<div style=\"margin-top:4px\">'+flags.map(f=>`<span class=\"flag-pill\">${f}</span>`).join('')+'</div>' : ''}</td>\n      <td class=\"num\">${money(it.value)}</td>\n      <td class=\"num\">${it.age_days ?? '&mdash;'}</td>\n      <td><span class=\"score-bar-track\"><span class=\"score-bar-fill\" style=\"width:${it.score}%;background:${scoreColor(it.score)}\"></span></span><span class=\"score-num\" style=\"color:${scoreColor(it.score)}\">${it.score}</span></td>\n    `;\n    tr.addEventListener('click', () => {\n      const next = tr.nextElementSibling;\n      if (next && next.classList.contains('desc-full-row')) { next.remove(); return; }\n      document.querySelectorAll('.desc-full-row').forEach(r=>r.remove());\n      const detailRow = document.createElement('tr');\n      detailRow.className = 'desc-full-row';\n      detailRow.innerHTML = `<td colspan=\"8\" class=\"desc-full open\">${formatDesc(it.desc_full || it.desc)}${it.status ? ` <br><br><strong>Status:</strong> ${it.status}` : ''}${it.owner ? ` &nbsp; <strong>Job Owner:</strong> ${it.owner}` : ''}</td>`;\n      tr.after(detailRow);\n    });\n"
+    },
+    {
+      "id": "th-click",
+      "find": "document.querySelectorAll('thead th[data-key]').forEach(th => {\n  th.addEventListener('click', () => {\n    const key = th.dataset.key;\n    if (key === 'value') state.sort = state.sort === 'value-desc' ? 'value-asc' : 'value-desc';\n    else if (key === 'age_days') state.sort = state.sort === 'age-desc' ? 'age-asc' : 'age-desc';\n    else if (key === 'score') state.sort = state.sort === 'score-desc' ? 'score-asc' : 'score-desc';\n    render();\n  });\n});",
+      "replace": "document.querySelectorAll('thead th[data-key]').forEach(th => {\n  th.addEventListener('click', () => {\n    const key = th.dataset.key;\n    if (key === 'value') state.sort = state.sort === 'value-desc' ? 'value-asc' : 'value-desc';\n    else if (key === 'age_days') state.sort = state.sort === 'age-desc' ? 'age-asc' : 'age-desc';\n    else if (key === 'score') state.sort = state.sort === 'score-desc' ? 'score-asc' : 'score-desc';\n    else if (key === 'owner') state.sort = state.sort === 'owner-asc' ? 'owner-desc' : 'owner-asc';\n    render();\n  });\n});"
+    }
+  ]
+}

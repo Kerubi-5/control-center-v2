@@ -13,39 +13,34 @@ Live: https://kerubi-5.github.io/control-center-v2/
 
 Clients pick a version from the top bar. **What's new** shows release notes. **Git diff** opens a GitHub compare (or release) link when tags exist.
 
-## Add a new version (e.g. 2.5)
+## Add a new version (e.g. 2.6)
 
-1. Encrypt the plaintext sketch with the same access password:
+### Option A — encrypt a full sketch (preferred for large changes)
 
 ```bash
 node scripts/encrypt-version.mjs \
-  --id 2.5 \
-  --input ./control_center_V2.5.html \
+  --id 2.6 \
+  --input ./control_center_V2.6.html \
   --password "$CC_PASSWORD"
 ```
 
-2. Append to `versions.json` (keep versions in chronological order) and set `"latest": "2.5"`:
+Then append to `versions.json` (chronological order), set `"latest"`, tag, and push.
+
+### Option B — patch an existing encrypted version (small UI deltas)
+
+`versions/2.5.json` is a patch on top of encrypted `2.4`. The shell decrypts the base, then applies find/replace patches. Use this when you do not want to re-encrypt for a small change.
 
 ```json
 {
-  "id": "2.5",
-  "label": "v2.5",
-  "payload": "versions/2.5.json",
-  "released": "2026-08-01",
-  "tag": "v2.5",
-  "notes": [
-    "Describe what changed for clients"
-  ]
+  "id": "2.6",
+  "label": "v2.6",
+  "payload": "versions/2.6.json",
+  "mode": "patch",
+  "base": "2.5",
+  "released": "2026-08-15",
+  "tag": "v2.6",
+  "notes": ["Describe what changed for clients"]
 }
-```
-
-3. Tag and push so the Git diff link works:
-
-```bash
-git add versions/2.5.json versions.json
-git commit -m "feat: add control center v2.5"
-git tag v2.5
-git push origin main --tags
 ```
 
 GitHub Pages redeploys from `main` automatically.
