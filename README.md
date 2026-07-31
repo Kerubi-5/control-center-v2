@@ -15,7 +15,7 @@ Clients pick a version from the top bar. **What's new** shows release notes. **G
 
 ## Add a new version (e.g. 2.6)
 
-### Option A — encrypt a full sketch (preferred for large changes)
+Encrypt a plaintext sketch with the **same access password** used by all versions:
 
 ```bash
 node scripts/encrypt-version.mjs \
@@ -24,23 +24,15 @@ node scripts/encrypt-version.mjs \
   --password "$CC_PASSWORD"
 ```
 
-Then append to `versions.json` (chronological order), set `"latest"`, tag, and push.
+Then append to `versions.json` (chronological order), set `"latest"`, tag, and push:
 
-### Option B — patch an existing encrypted version (small UI deltas)
-
-`versions/2.5.json` is a patch on top of encrypted `2.4`. The shell decrypts the base, then applies find/replace patches. Use this when you do not want to re-encrypt for a small change.
-
-```json
-{
-  "id": "2.6",
-  "label": "v2.6",
-  "payload": "versions/2.6.json",
-  "mode": "patch",
-  "base": "2.5",
-  "released": "2026-08-15",
-  "tag": "v2.6",
-  "notes": ["Describe what changed for clients"]
-}
+```bash
+git add versions/2.6.json versions.json
+git commit -m "feat: add control center v2.6"
+git tag v2.6
+git push origin main --tags
 ```
 
 GitHub Pages redeploys from `main` automatically.
+
+Do not commit plaintext sketches or the password. Keep `CC_PASSWORD` in your local shell/env only.

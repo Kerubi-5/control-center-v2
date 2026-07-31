@@ -1,0 +1,5 @@
+# Local plaintext sketches (encrypt before deploy)
+control_center_V*.html
+!control_center_V2.4.html
+.env
+.env.*
