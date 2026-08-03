@@ -24,6 +24,18 @@ node scripts/encrypt-version.mjs \
   --password "$CC_PASSWORD"
 ```
 
+If a sketch reads a local JSON feed, keep that data inside the password-protected payload instead of publishing it as a separate static file:
+
+```bash
+node scripts/encrypt-version.mjs \
+  --id 2.6 \
+  --input ./control_center_V2.6.html \
+  --data ./data/sales_pipeline.json \
+  --password "$CC_PASSWORD"
+```
+
+`--data` injects the JSON into the encrypted sketch as `window.__CONTROL_CENTER_PIPELINE__`. The sketch should read that value before attempting any local-file fetch fallback.
+
 Then append to `versions.json` (chronological order), set `"latest"`, tag, and push:
 
 ```bash

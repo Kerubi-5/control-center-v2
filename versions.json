@@ -33,7 +33,7 @@
       "label": "v2.5 Alternate · Alba V3",
       "payload": "versions/2.5-alt.json",
       "released": "2026-08-03",
-      "tag": "v2.5-alt",
+      "tag": "v2.5-alt.1",
       "notes": [
         "Alternate Alba Leadership Control Centre V3 sketch",
         "Kept separate from the current v2.5 sketch for side-by-side review"
