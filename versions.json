@@ -27,6 +27,17 @@
         "Job Owner shows real people names from the Ara vault sales pipeline extract",
         "Open jobs still show — where that sheet had no Job Owner column"
       ]
+    },
+    {
+      "id": "2.5-alt",
+      "label": "v2.5 Alternate · Alba V3",
+      "payload": "versions/2.5-alt.json",
+      "released": "2026-08-03",
+      "tag": "v2.5-alt",
+      "notes": [
+        "Alternate Alba Leadership Control Centre V3 sketch",
+        "Kept separate from the current v2.5 sketch for side-by-side review"
+      ]
     }
   ]
 }
