@@ -906,18 +906,124 @@
     }
 
     /**
-     * Make unchanged pixels fully transparent and boost changed pixels for clients.
+     * Turn raw pixelmatch output into focused pink marks.
+     * Skips full-page "wash" from layout shifts / large data rewrites by only
+     * keeping compact local change cells.
      * @param {ImageData} diffData
+     * @param {number} width
+     * @param {number} height
+     * @returns {{ image: ImageData, keptPixels: number, totalDiff: number, ratio: number, mode: "focused" | "skipped" | "none" }}
      */
-    function boostDiffVisibility(diffData) {
-      const data = diffData.data;
-      for (let i = 0; i < data.length; i += 4) {
-        if (data[i + 3] === 0) continue;
-        data[i] = 255;
-        data[i + 1] = 64;
-        data[i + 2] = 160;
-        data[i + 3] = 170;
+    function focusDiffOverlay(diffData, width, height) {
+      const src = diffData.data;
+      const total = Math.max(1, width * height);
+      let totalDiff = 0;
+      for (let i = 3; i < src.length; i += 4) {
+        if (src[i] > 0) totalDiff += 1;
       }
+      const ratio = totalDiff / total;
+
+      const cell = 48;
+      const cols = Math.max(1, Math.ceil(width / cell));
+      const rows = Math.max(1, Math.ceil(height / cell));
+      const cellRatio = new Float32Array(cols * rows);
+      const keep = new Uint8Array(cols * rows);
+
+      for (let ry = 0; ry < rows; ry += 1) {
+        for (let cx = 0; cx < cols; cx += 1) {
+          const x0 = cx * cell;
+          const y0 = ry * cell;
+          const x1 = Math.min(width, x0 + cell);
+          const y1 = Math.min(height, y0 + cell);
+          let changed = 0;
+          let count = 0;
+          for (let y = y0; y < y1; y += 1) {
+            for (let x = x0; x < x1; x += 1) {
+              count += 1;
+              if (src[(y * width + x) * 4 + 3] > 0) changed += 1;
+            }
+          }
+          const r = changed / Math.max(1, count);
+          cellRatio[ry * cols + cx] = r;
+          // Local edits only — skip near-total cell replacement (shift/rewrite).
+          if (r >= 0.035 && r <= 0.45) keep[ry * cols + cx] = 1;
+        }
+      }
+
+      // Drop full-width hot bands (classic vertical layout-shift artifact).
+      for (let ry = 0; ry < rows; ry += 1) {
+        let hot = 0;
+        for (let cx = 0; cx < cols; cx += 1) {
+          if (cellRatio[ry * cols + cx] > 0.3) hot += 1;
+        }
+        if (hot / cols >= 0.7) {
+          for (let cx = 0; cx < cols; cx += 1) keep[ry * cols + cx] = 0;
+        }
+      }
+
+      // Light dilation so marks read as blobs, not speckles.
+      const dilate = new Uint8Array(keep);
+      for (let ry = 0; ry < rows; ry += 1) {
+        for (let cx = 0; cx < cols; cx += 1) {
+          if (!keep[ry * cols + cx]) continue;
+          for (let dy = -1; dy <= 1; dy += 1) {
+            for (let dx = -1; dx <= 1; dx += 1) {
+              const nx = cx + dx;
+              const ny = ry + dy;
+              if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+              // Only dilate into mildly-changed neighbors, not empty chrome.
+              if (cellRatio[ny * cols + nx] >= 0.02) dilate[ny * cols + nx] = 1;
+            }
+          }
+        }
+      }
+
+      let keptCells = 0;
+      for (let i = 0; i < dilate.length; i += 1) if (dilate[i]) keptCells += 1;
+
+      const out = new ImageData(width, height);
+      const dst = out.data;
+      let keptPixels = 0;
+
+      if (keptCells === 0) {
+        return {
+          image: out,
+          keptPixels: 0,
+          totalDiff,
+          ratio,
+          mode: totalDiff === 0 ? "none" : "skipped",
+        };
+      }
+
+      for (let ry = 0; ry < rows; ry += 1) {
+        for (let cx = 0; cx < cols; cx += 1) {
+          if (!dilate[ry * cols + cx]) continue;
+          const x0 = cx * cell;
+          const y0 = ry * cell;
+          const x1 = Math.min(width, x0 + cell);
+          const y1 = Math.min(height, y0 + cell);
+          for (let y = y0; y < y1; y += 1) {
+            for (let x = x0; x < x1; x += 1) {
+              const i = (y * width + x) * 4;
+              const changed = src[i + 3] > 0;
+              // Soft cell wash + stronger mark on actual changed pixels.
+              dst[i] = 255;
+              dst[i + 1] = 64;
+              dst[i + 2] = 160;
+              dst[i + 3] = changed ? 150 : 48;
+              if (changed) keptPixels += 1;
+            }
+          }
+        }
+      }
+
+      return {
+        image: out,
+        keptPixels,
+        totalDiff,
+        ratio,
+        mode: "focused",
+      };
     }
 
     /**
@@ -941,11 +1047,11 @@
 
     /**
      * Library-based visual diff (html2canvas + pixelmatch).
-     * Overlays pink pixels on the right sketch where it differs from the left.
+     * Overlays focused pink marks on the right sketch — not a full-page wash.
      * @param {Document} leftDoc
      * @param {Document} rightDoc
      * @param {(step: string) => void} [onProgress]
-     * @returns {Promise<{ pixels: number }>}
+     * @returns {Promise<{ pixels: number, mode: string, message: string }>}
      */
     async function applyVisualHighlights(leftDoc, rightDoc, onProgress) {
       if (typeof html2canvas !== "function") {
@@ -968,7 +1074,6 @@
         if (doc.defaultView) doc.defaultView.scrollTo(0, 0);
       }
 
-      // Expand + chart paint settle.
       notify("Preparing pages…");
       await new Promise((r) => setTimeout(r, 350));
 
@@ -984,85 +1089,97 @@
       const rightData = imageDataOnCanvas(rightShot, width, height);
       const diffData = new ImageData(width, height);
 
-      const pixels = pixelmatch(
-        leftData.data,
-        rightData.data,
-        diffData.data,
-        width,
-        height,
-        {
-          threshold: 0.1,
-          includeAA: true,
-          alpha: 1,
-          diffColor: [255, 64, 160],
-          diffColorAlt: [255, 140, 0],
-        }
-      );
+      pixelmatch(leftData.data, rightData.data, diffData.data, width, height, {
+        threshold: 0.12,
+        includeAA: false,
+        alpha: 1,
+        diffColor: [255, 64, 160],
+        diffColorAlt: [255, 140, 0],
+      });
 
-      boostDiffVisibility(diffData);
-
-      const overlay = rightDoc.createElement("canvas");
-      overlay.id = "cc-visual-diff-overlay";
-      overlay.width = width;
-      overlay.height = height;
-      overlay.getContext("2d").putImageData(diffData, 0, 0);
-
-      const cssW = Math.max(
-        rightDoc.documentElement.scrollWidth,
-        rightDoc.body.scrollWidth,
-        1
-      );
-      const cssH = Math.max(
-        rightDoc.documentElement.scrollHeight,
-        rightDoc.body.scrollHeight,
-        1
-      );
-      overlay.setAttribute(
-        "style",
-        [
-          "position:absolute",
-          "left:0",
-          "top:0",
-          `width:${cssW}px`,
-          `height:${cssH}px`,
-          "pointer-events:none",
-          "z-index:2147483646",
-        ].join(";")
-      );
+      notify("Focusing local changes…");
+      const focused = focusDiffOverlay(diffData, width, height);
 
       const body = rightDoc.body;
       if (getComputedStyle(body).position === "static") {
         body.style.position = "relative";
       }
-      body.appendChild(overlay);
 
-      if (pixels > 0) {
-        const badge = rightDoc.createElement("div");
-        badge.id = "cc-visual-diff-badge";
-        badge.textContent = "Pink = changed from left";
-        badge.setAttribute(
-          "style",
-          [
-            "position:fixed",
-            "top:12px",
-            "right:12px",
-            "z-index:2147483647",
-            "padding:8px 12px",
-            "border-radius:999px",
-            "background:rgba(22,27,34,0.92)",
-            "color:#fff",
-            "font:600 12px/1.2 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif",
-            "box-shadow:0 8px 24px rgba(0,0,0,0.28)",
-            "pointer-events:none",
-          ].join(";")
-        );
-        body.appendChild(badge);
-        setTimeout(() => {
-          if (badge.parentNode) badge.style.opacity = "0.85";
-        }, 4000);
+      let message = "";
+      if (focused.mode === "none") {
+        message = "No visual differences found";
+      } else if (focused.mode === "skipped") {
+        message =
+          "Large layout/data differences — pink overlay limited. Compare both sides directly.";
+      } else {
+        message = "Pink marks local changes vs the left version";
       }
 
-      return { pixels };
+      if (focused.mode === "focused" && focused.keptPixels > 0) {
+        const overlay = rightDoc.createElement("canvas");
+        overlay.id = "cc-visual-diff-overlay";
+        overlay.width = width;
+        overlay.height = height;
+        overlay.getContext("2d").putImageData(focused.image, 0, 0);
+
+        const cssW = Math.max(
+          rightDoc.documentElement.scrollWidth,
+          rightDoc.body.scrollWidth,
+          1
+        );
+        const cssH = Math.max(
+          rightDoc.documentElement.scrollHeight,
+          rightDoc.body.scrollHeight,
+          1
+        );
+        overlay.setAttribute(
+          "style",
+          [
+            "position:absolute",
+            "left:0",
+            "top:0",
+            `width:${cssW}px`,
+            `height:${cssH}px`,
+            "pointer-events:none",
+            "z-index:2147483646",
+          ].join(";")
+        );
+        body.appendChild(overlay);
+      }
+
+      const badge = rightDoc.createElement("div");
+      badge.id = "cc-visual-diff-badge";
+      badge.textContent =
+        focused.mode === "focused"
+          ? "Pink = local changes from left"
+          : focused.mode === "skipped"
+            ? "Too different for pink overlay"
+            : "No visual diff";
+      badge.setAttribute(
+        "style",
+        [
+          "position:fixed",
+          "top:12px",
+          "right:12px",
+          "z-index:2147483647",
+          "padding:8px 12px",
+          "border-radius:999px",
+          "background:rgba(22,27,34,0.92)",
+          "color:#fff",
+          "font:600 12px/1.2 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif",
+          "box-shadow:0 8px 24px rgba(0,0,0,0.28)",
+          "pointer-events:none",
+          "max-width:min(280px, calc(100% - 24px))",
+        ].join(";")
+      );
+      body.appendChild(badge);
+
+      return {
+        pixels: focused.keptPixels,
+        mode: focused.mode,
+        message,
+        ratio: focused.ratio,
+      };
     }
 
     /**
@@ -1175,20 +1292,28 @@
             (step) => setStatus("Highlighting changes…", true, step)
           );
           if (ui.compareRightTag) {
-            if (result.pixels > 0) {
+            if (result.mode === "focused") {
               ui.compareRightTag.textContent = "After · changes highlighted";
               ui.compareRightTag.classList.add("highlighted");
+            } else if (result.mode === "skipped") {
+              ui.compareRightTag.textContent = "After · too different";
+              ui.compareRightTag.classList.remove("highlighted");
             } else {
               ui.compareRightTag.textContent = "After · identical";
+              ui.compareRightTag.classList.remove("highlighted");
             }
           }
           if (ui.compareHint) {
-            ui.compareHint.textContent =
-              result.pixels > 0
-                ? "Pink marks what changed vs the left version"
-                : "No visual differences found";
+            ui.compareHint.textContent = result.message;
           }
-          if (result.pixels === 0) {
+          if (result.mode === "skipped") {
+            setStatus(
+              "Large differences detected — pink overlay limited.",
+              true,
+              "Compare both sides directly for the full picture."
+            );
+            setTimeout(() => setStatus("", false), 3500);
+          } else if (result.mode === "none") {
             setStatus("No visual differences found between these versions.", true);
             setTimeout(() => setStatus("", false), 2800);
           } else {
