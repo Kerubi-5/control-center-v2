@@ -6,12 +6,20 @@ Live: https://kerubi-5.github.io/control-center-v2/
 
 ## How it works
 
-- `index.html` — unlock gate + version dropdown shell (latest opens by default)
+- `index.html` — unlock gate + version dropdown shell (production opens by default)
 - `versions.json` — manifest of available versions, production selection, release notes, and Git tags
 - `versions/<id>.json` — AES-GCM encrypted sketch payloads
+- `vendor/html2canvas.min.js` + `vendor/pixelmatch.js` — visual compare libraries
 - `scripts/encrypt-version.mjs` — helper to add a new encrypted version
 
-Clients pick a version from the top bar. **What's new** shows plain-language release notes. **Compare** opens a side-by-side view of two versions (with optional synced scrolling) so non-technical clients can see UI changes themselves.
+Clients pick a version from the top bar. **What's new** shows plain-language release notes.
+
+**Compare** is opt-in (nothing auto-launches):
+
+1. Side-by-side **Before / After** with optional synced scrolling
+2. **Highlight changes** (on by default) screenshots both rendered sketches ([html2canvas](https://html2canvas.hertzen.com/)), diffs pixels ([pixelmatch](https://github.com/mapbox/pixelmatch)), and paints pink on the right where they differ
+
+Deep links: `?v=2.6`, `?mode=compare&left=2.5&right=2.6`, `?mode=compare&highlight=1&left=2.5&right=2.6`. Use `highlight=0` to turn the overlay off.
 
 ## Production and private versions
 
@@ -19,14 +27,14 @@ Clients pick a version from the top bar. **What's new** shows plain-language rel
 
 Set `"hidden": true` on a version to keep it out of the version and compare pickers. It remains available to anyone with the password and an exact direct link such as `?v=2.5-alt`.
 
-## Add a new version (e.g. 2.6)
+## Add a new version (e.g. 2.7)
 
 Encrypt a plaintext sketch with the **same access password** used by all versions:
 
 ```bash
 node scripts/encrypt-version.mjs \
-  --id 2.6 \
-  --input ./control_center_V2.6.html \
+  --id 2.7 \
+  --input ./control_center_V2.7.html \
   --password "$CC_PASSWORD"
 ```
 
@@ -34,20 +42,18 @@ If a sketch reads a local JSON feed, keep that data inside the password-protecte
 
 ```bash
 node scripts/encrypt-version.mjs \
-  --id 2.6 \
-  --input ./control_center_V2.6.html \
+  --id 2.7 \
+  --input ./control_center_V2.7.html \
   --data ./data/sales_pipeline.json \
   --password "$CC_PASSWORD"
 ```
 
-`--data` injects the JSON into the encrypted sketch as `window.__CONTROL_CENTER_PIPELINE__`. The sketch should read that value before attempting any local-file fetch fallback.
-
-Then append to `versions.json` (chronological order), set `"production"` when the version should become the default, tag, and push:
+Then append to `versions.json` (chronological order), set `"latest"` / `"production"` as needed, tag, and push:
 
 ```bash
-git add versions/2.6.json versions.json
-git commit -m "feat: add control center v2.6"
-git tag v2.6
+git add versions/2.7.json versions.json
+git commit -m "feat: add control center v2.7"
+git tag v2.7
 git push origin main --tags
 ```
 

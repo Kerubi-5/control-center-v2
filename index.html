@@ -200,6 +200,51 @@
     body.compare-mode .compare-controls { display: flex; }
     body.compare-mode .latest-pill { display: none !important; }
 
+    .highlight-label {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .highlight-label input { margin: 0; }
+
+    body.compare-mode .highlight-label { display: inline-flex; }
+    body.compare-mode .sync-label { display: inline-flex; }
+
+    .diff-legend {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    body.compare-mode.highlight-on .diff-legend { display: inline-flex; }
+
+    .diff-legend .swatch {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .diff-legend .chip {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      border: 1px solid transparent;
+    }
+
+    .diff-legend .chip.changed {
+      background: #ff66b3;
+      border-color: #e60073;
+    }
+
     .bar-btn {
       appearance: none;
       background: transparent;
@@ -267,6 +312,7 @@
       min-height: 0;
       border-right: 1px solid var(--border-color);
       background: #fff;
+      position: relative;
     }
 
     .compare-pane:last-child { border-right: 0; }
@@ -301,12 +347,38 @@
       min-height: 0;
     }
 
+    .compare-pane-label .tag.highlighted {
+      color: #9b1b60;
+      background: #ffe0f0;
+    }
+
+    .compare-hint {
+      display: none;
+      position: absolute;
+      left: 12px;
+      bottom: 12px;
+      z-index: 3;
+      max-width: min(320px, calc(100% - 24px));
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: rgba(22, 27, 34, 0.92);
+      color: #f0f6fc;
+      font-size: 12px;
+      line-height: 1.4;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      pointer-events: none;
+    }
+
+    body.compare-mode.highlight-on .compare-hint { display: block; }
+
     .status {
       position: absolute;
       inset: 0;
       display: none;
       align-items: center;
       justify-content: center;
+      flex-direction: column;
+      gap: 8px;
       background: rgba(13, 17, 23, 0.92);
       color: var(--muted);
       font-size: 14px;
@@ -314,6 +386,11 @@
     }
 
     .status.show { display: flex; }
+
+    .status .status-detail {
+      font-size: 12px;
+      color: #8b949e;
+    }
 
     .notes-panel {
       display: none;
@@ -361,6 +438,7 @@
       .compare-pane:last-child { border-bottom: 0; }
       .brand-text { display: none; }
       .topbar { gap: 8px; padding: 0 10px; overflow-x: auto; }
+      .diff-legend { display: none !important; }
     }
   </style>
 </head>
@@ -393,6 +471,13 @@
         <select id="compare-left" aria-label="Left version"></select>
         <label for="compare-right">Right</label>
         <select id="compare-right" aria-label="Right version"></select>
+        <label class="highlight-label" title="Pink overlay shows pixels that differ from the left version">
+          <input type="checkbox" id="highlight-changes" checked>
+          Highlight changes
+        </label>
+        <div class="diff-legend" id="diff-legend" aria-label="Change colors">
+          <span class="swatch"><span class="chip changed" aria-hidden="true"></span> Pink = changed</span>
+        </div>
         <label class="sync-label" title="Keep both sides scrolling together">
           <input type="checkbox" id="sync-scroll" checked>
           Sync scroll
@@ -404,7 +489,10 @@
     </header>
 
     <div class="viewer-wrap">
-      <div class="status" id="status">Loading version…</div>
+      <div class="status" id="status">
+        <div id="status-text">Loading version…</div>
+        <div class="status-detail" id="status-detail"></div>
+      </div>
       <iframe id="viewer-single" title="Control Center sketch" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"></iframe>
       <div class="compare-grid" id="compare-grid">
         <div class="compare-pane">
@@ -412,8 +500,12 @@
           <iframe id="viewer-left" title="Earlier version" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"></iframe>
         </div>
         <div class="compare-pane">
-          <div class="compare-pane-label"><span id="compare-right-label">Later</span><span class="tag">After</span></div>
+          <div class="compare-pane-label">
+            <span id="compare-right-label">Later</span>
+            <span class="tag" id="compare-right-tag">After</span>
+          </div>
           <iframe id="viewer-right" title="Later version" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"></iframe>
+          <div class="compare-hint" id="compare-hint">Pink marks what changed vs the left version</div>
         </div>
       </div>
     </div>
@@ -425,6 +517,8 @@
     </aside>
   </div>
 
+  <script src="vendor/html2canvas.min.js"></script>
+  <script src="vendor/pixelmatch.js"></script>
   <script>
     const SESSION_KEY = "cc_v2_session_password";
     const params = new URLSearchParams(window.location.search);
@@ -441,7 +535,10 @@
       compareRight: document.getElementById("compare-right"),
       compareLeftLabel: document.getElementById("compare-left-label"),
       compareRightLabel: document.getElementById("compare-right-label"),
+      compareRightTag: document.getElementById("compare-right-tag"),
+      compareHint: document.getElementById("compare-hint"),
       compareBtn: document.getElementById("compare-btn"),
+      highlightChanges: document.getElementById("highlight-changes"),
       syncScroll: document.getElementById("sync-scroll"),
       latestPill: document.getElementById("latest-pill"),
       notesBtn: document.getElementById("notes-btn"),
@@ -450,6 +547,8 @@
       notesMeta: document.getElementById("notes-meta"),
       notesList: document.getElementById("notes-list"),
       status: document.getElementById("status"),
+      statusText: document.getElementById("status-text"),
+      statusDetail: document.getElementById("status-detail"),
       viewer: document.getElementById("viewer-single"),
       viewerLeft: document.getElementById("viewer-left"),
       viewerRight: document.getElementById("viewer-right"),
@@ -462,6 +561,13 @@
     /** @type {string | null} */
     let sessionPassword = null;
     let compareMode = false;
+    /**
+     * Side-by-side compare paints highlights on the right pane by default.
+     * Turn off with ?highlight=0
+     */
+    let highlightMode = params.get("highlight") !== "0";
+    /** @type {Record<string, string>} */
+    const htmlCache = {};
     /** @type {Record<string, string>} */
     const blobCache = {};
     let syncingScroll = false;
@@ -520,8 +626,15 @@
      * @param {string} message
      * @param {boolean} show
      */
-    function setStatus(message, show) {
-      ui.status.textContent = message;
+    /**
+     * @param {string} message
+     * @param {boolean} show
+     * @param {string} [detail]
+     */
+    function setStatus(message, show, detail = "") {
+      ui.statusText.textContent = message;
+      ui.statusDetail.textContent = detail || "";
+      ui.statusDetail.style.display = detail ? "block" : "none";
       ui.status.classList.toggle("show", show);
     }
 
@@ -553,7 +666,7 @@
     }
 
     /**
-     * Prefer ?v=, else latest from the manifest.
+     * Prefer ?v=, else production from the manifest.
      * @returns {string}
      */
     function resolveInitialVersion() {
@@ -563,7 +676,7 @@
     }
 
     /**
-     * Default compare pair: previous version vs latest (or active).
+     * Default compare pair: previous version vs production/active.
      * @returns {[string, string]}
      */
     function defaultComparePair() {
@@ -705,15 +818,27 @@
     }
 
     /**
+     * Decrypt a version once and cache plaintext HTML for iframes and marked diffs.
+     * @param {string} id
+     * @returns {Promise<string>}
+     */
+    async function getVersionHtml(id) {
+      if (htmlCache[id]) return htmlCache[id];
+      const version = getVersion(id);
+      if (!version) throw new Error(`Unknown version: ${id}`);
+      const html = await materializeVersionHtml(version, sessionPassword);
+      htmlCache[id] = html;
+      return html;
+    }
+
+    /**
      * Decrypt a version once and cache a blob URL for iframes.
      * @param {string} id
      * @returns {Promise<string>}
      */
     async function getBlobUrl(id) {
       if (blobCache[id]) return blobCache[id];
-      const version = getVersion(id);
-      if (!version) throw new Error(`Unknown version: ${id}`);
-      const html = await materializeVersionHtml(version, sessionPassword);
+      const html = await getVersionHtml(id);
       const blob = new Blob([html], { type: "text/html" });
       const blobUrl = URL.createObjectURL(blob);
       blobCache[id] = blobUrl;
@@ -728,17 +853,413 @@
       iframe.src = await getBlobUrl(id);
     }
 
+    /**
+     * Capture options for html2canvas inside a sketch iframe document.
+     * @param {Document} doc
+     */
+    function captureOptions(doc) {
+      const width = Math.max(
+        doc.documentElement.scrollWidth,
+        doc.body.scrollWidth,
+        doc.documentElement.clientWidth,
+        1
+      );
+      const height = Math.max(
+        doc.documentElement.scrollHeight,
+        doc.body.scrollHeight,
+        1
+      );
+      // Cap scale for large sketches so compare stays responsive.
+      const scale = Math.min(1, 1100 / width);
+      return {
+        backgroundColor: "#ffffff",
+        logging: false,
+        useCORS: true,
+        allowTaint: true,
+        imageTimeout: 5000,
+        scale,
+        width,
+        height,
+        windowWidth: width,
+        windowHeight: height,
+        scrollX: 0,
+        scrollY: -(doc.defaultView ? doc.defaultView.pageYOffset : 0),
+      };
+    }
+
+    /**
+     * Draw a source canvas onto a white canvas of fixed size and return ImageData.
+     * @param {HTMLCanvasElement} source
+     * @param {number} width
+     * @param {number} height
+     * @returns {ImageData}
+     */
+    function imageDataOnCanvas(source, width, height) {
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(source, 0, 0);
+      return ctx.getImageData(0, 0, width, height);
+    }
+
+    /**
+     * Make unchanged pixels fully transparent and boost changed pixels for clients.
+     * @param {ImageData} diffData
+     */
+    function boostDiffVisibility(diffData) {
+      const data = diffData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] === 0) continue;
+        data[i] = 255;
+        data[i + 1] = 64;
+        data[i + 2] = 160;
+        data[i + 3] = 170;
+      }
+    }
+
+    /**
+     * Wait until the sketch's JS has populated the triage table (or timeout).
+     * @param {Document} doc
+     * @param {number} [timeoutMs]
+     * @returns {Promise<boolean>}
+     */
+    async function waitForSketchReady(doc, timeoutMs = 20000) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const rows = doc.querySelectorAll("#table-body tr").length;
+        const countEl = doc.getElementById("triage-total-count");
+        const countText = countEl ? countEl.textContent.trim() : "";
+        if (rows > 0) return true;
+        if (countText && !/^0(\s+items)?$/i.test(countText)) return true;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return false;
+    }
+
+    /**
+     * Library-based visual diff (html2canvas + pixelmatch).
+     * Overlays pink pixels on the right sketch where it differs from the left.
+     * @param {Document} leftDoc
+     * @param {Document} rightDoc
+     * @param {(step: string) => void} [onProgress]
+     * @returns {Promise<{ pixels: number }>}
+     */
+    async function applyVisualHighlights(leftDoc, rightDoc, onProgress) {
+      if (typeof html2canvas !== "function") {
+        throw new Error("html2canvas failed to load");
+      }
+      if (typeof pixelmatch !== "function") {
+        throw new Error("pixelmatch failed to load");
+      }
+
+      const notify = typeof onProgress === "function" ? onProgress : () => {};
+
+      for (const doc of [leftDoc, rightDoc]) {
+        doc.querySelectorAll(".collapsed").forEach((el) => {
+          el.classList.remove("collapsed");
+        });
+        const oldOverlay = doc.getElementById("cc-visual-diff-overlay");
+        if (oldOverlay) oldOverlay.remove();
+        const oldBadge = doc.getElementById("cc-visual-diff-badge");
+        if (oldBadge) oldBadge.remove();
+        if (doc.defaultView) doc.defaultView.scrollTo(0, 0);
+      }
+
+      // Expand + chart paint settle.
+      notify("Preparing pages…");
+      await new Promise((r) => setTimeout(r, 350));
+
+      notify("Capturing before…");
+      const leftShot = await html2canvas(leftDoc.body, captureOptions(leftDoc));
+      notify("Capturing after…");
+      const rightShot = await html2canvas(rightDoc.body, captureOptions(rightDoc));
+
+      notify("Comparing pixels…");
+      const width = Math.max(leftShot.width, rightShot.width);
+      const height = Math.max(leftShot.height, rightShot.height);
+      const leftData = imageDataOnCanvas(leftShot, width, height);
+      const rightData = imageDataOnCanvas(rightShot, width, height);
+      const diffData = new ImageData(width, height);
+
+      const pixels = pixelmatch(
+        leftData.data,
+        rightData.data,
+        diffData.data,
+        width,
+        height,
+        {
+          threshold: 0.1,
+          includeAA: true,
+          alpha: 1,
+          diffColor: [255, 64, 160],
+          diffColorAlt: [255, 140, 0],
+        }
+      );
+
+      boostDiffVisibility(diffData);
+
+      const overlay = rightDoc.createElement("canvas");
+      overlay.id = "cc-visual-diff-overlay";
+      overlay.width = width;
+      overlay.height = height;
+      overlay.getContext("2d").putImageData(diffData, 0, 0);
+
+      const cssW = Math.max(
+        rightDoc.documentElement.scrollWidth,
+        rightDoc.body.scrollWidth,
+        1
+      );
+      const cssH = Math.max(
+        rightDoc.documentElement.scrollHeight,
+        rightDoc.body.scrollHeight,
+        1
+      );
+      overlay.setAttribute(
+        "style",
+        [
+          "position:absolute",
+          "left:0",
+          "top:0",
+          `width:${cssW}px`,
+          `height:${cssH}px`,
+          "pointer-events:none",
+          "z-index:2147483646",
+        ].join(";")
+      );
+
+      const body = rightDoc.body;
+      if (getComputedStyle(body).position === "static") {
+        body.style.position = "relative";
+      }
+      body.appendChild(overlay);
+
+      if (pixels > 0) {
+        const badge = rightDoc.createElement("div");
+        badge.id = "cc-visual-diff-badge";
+        badge.textContent = "Pink = changed from left";
+        badge.setAttribute(
+          "style",
+          [
+            "position:fixed",
+            "top:12px",
+            "right:12px",
+            "z-index:2147483647",
+            "padding:8px 12px",
+            "border-radius:999px",
+            "background:rgba(22,27,34,0.92)",
+            "color:#fff",
+            "font:600 12px/1.2 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif",
+            "box-shadow:0 8px 24px rgba(0,0,0,0.28)",
+            "pointer-events:none",
+          ].join(";")
+        );
+        body.appendChild(badge);
+        setTimeout(() => {
+          if (badge.parentNode) badge.style.opacity = "0.85";
+        }, 4000);
+      }
+
+      return { pixels };
+    }
+
+    /**
+     * Navigate an iframe to a version and wait until sketch data has rendered.
+     * @param {HTMLIFrameElement} iframe
+     * @param {string} id
+     * @returns {Promise<Document>}
+     */
+    async function loadIframeSketch(iframe, id) {
+      const blobUrl = await getBlobUrl(id);
+      const navToken = String(Date.now()) + Math.random().toString(16).slice(2);
+      const navUrl = `${blobUrl}#ccnav=${navToken}`;
+
+      const doc = await new Promise((resolve, reject) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          iframe.removeEventListener("load", onLoad);
+          reject(new Error("Iframe load timed out"));
+        }, 25000);
+
+        const onLoad = async () => {
+          try {
+            const href = iframe.contentWindow
+              ? iframe.contentWindow.location.href
+              : "";
+            if (!href || href === "about:blank" || !href.includes(`ccnav=${navToken}`)) {
+              return;
+            }
+
+            iframe.removeEventListener("load", onLoad);
+            const loaded = iframe.contentDocument;
+            if (!loaded || !loaded.body) {
+              throw new Error("Iframe has no body");
+            }
+
+            const ready = await waitForSketchReady(loaded, 12000);
+            if (!ready) {
+              await new Promise((r) => setTimeout(r, 400));
+            }
+
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(loaded);
+          } catch (err) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            iframe.removeEventListener("load", onLoad);
+            reject(err);
+          }
+        };
+
+        iframe.addEventListener("load", onLoad);
+        iframe.src = "about:blank";
+        requestAnimationFrame(() => {
+          iframe.src = navUrl;
+        });
+      });
+      return doc;
+    }
+
+    /**
+     * Sync highlight checkbox + body class with highlightMode.
+     */
+    function syncHighlightChrome() {
+      ui.highlightChanges.checked = highlightMode;
+      document.body.classList.toggle("highlight-on", compareMode && highlightMode);
+    }
+
+    /**
+     * Load side-by-side compare, optionally highlighting the right pane.
+     */
+    async function loadCompare() {
+      const leftId = ui.compareLeft.value;
+      const rightId = ui.compareRight.value;
+      const left = getVersion(leftId);
+      const right = getVersion(rightId);
+      if (!left || !right) throw new Error("Unknown compare versions");
+
+      ui.compareLeftLabel.textContent = left.label;
+      ui.compareRightLabel.textContent = right.label;
+      if (ui.compareRightTag) {
+        ui.compareRightTag.textContent = "After";
+        ui.compareRightTag.classList.remove("highlighted");
+      }
+
+      updateMeta(right);
+      syncHighlightChrome();
+      setStatus(
+        `Loading ${left.label} and ${right.label}…`,
+        true,
+        highlightMode ? "Visual diff will run after both pages render" : ""
+      );
+
+      try {
+        const [leftDoc, rightDoc] = await Promise.all([
+          loadIframeSketch(ui.viewerLeft, leftId),
+          loadIframeSketch(ui.viewerRight, rightId),
+        ]);
+
+        wireSyncScroll();
+
+        if (highlightMode) {
+          const result = await applyVisualHighlights(
+            leftDoc,
+            rightDoc,
+            (step) => setStatus("Highlighting changes…", true, step)
+          );
+          if (ui.compareRightTag) {
+            if (result.pixels > 0) {
+              ui.compareRightTag.textContent = "After · changes highlighted";
+              ui.compareRightTag.classList.add("highlighted");
+            } else {
+              ui.compareRightTag.textContent = "After · identical";
+            }
+          }
+          if (ui.compareHint) {
+            ui.compareHint.textContent =
+              result.pixels > 0
+                ? "Pink marks what changed vs the left version"
+                : "No visual differences found";
+          }
+          if (result.pixels === 0) {
+            setStatus("No visual differences found between these versions.", true);
+            setTimeout(() => setStatus("", false), 2800);
+          } else {
+            setStatus("", false);
+          }
+        } else {
+          setStatus("", false);
+        }
+
+        updateUrl();
+      } catch (err) {
+        console.error("Compare load failed:", err);
+        try {
+          await Promise.all([
+            setIframeVersion(ui.viewerLeft, leftId),
+            setIframeVersion(ui.viewerRight, rightId),
+          ]);
+          wireSyncScroll();
+          updateUrl();
+          setStatus(
+            highlightMode
+              ? "Loaded side by side — visual highlight unavailable."
+              : "",
+            Boolean(highlightMode),
+            highlightMode ? String(err && err.message ? err.message : err) : ""
+          );
+          if (highlightMode) {
+            setTimeout(() => setStatus("", false), 3500);
+          }
+        } catch (inner) {
+          console.error(inner);
+          setStatus("Could not load compare view.", true);
+        }
+      }
+    }
+
+    /**
+     * Turn highlights on/off inside the current side-by-side compare.
+     * @param {boolean} enabled
+     */
+    async function setHighlightMode(enabled) {
+      highlightMode = enabled;
+      syncHighlightChrome();
+      if (!compareMode) {
+        updateUrl();
+        return;
+      }
+      // Reload panes so marks are applied cleanly (or cleared).
+      await loadCompare();
+    }
+
     function updateUrl() {
       const url = new URL(window.location.href);
       if (compareMode) {
         url.searchParams.set("mode", "compare");
         url.searchParams.set("left", ui.compareLeft.value);
         url.searchParams.set("right", ui.compareRight.value);
+        if (highlightMode) {
+          url.searchParams.set("highlight", "1");
+          url.searchParams.set("view", "marked");
+        } else {
+          url.searchParams.set("highlight", "0");
+          url.searchParams.delete("view");
+        }
         url.searchParams.delete("v");
       } else {
         url.searchParams.delete("mode");
         url.searchParams.delete("left");
         url.searchParams.delete("right");
+        url.searchParams.delete("highlight");
+        url.searchParams.delete("view");
         if (activeId) url.searchParams.set("v", activeId);
       }
       history.replaceState(null, "", url);
@@ -758,31 +1279,6 @@
       updateMeta(version);
       setStatus(`Loading ${version.label}…`, true);
       await setIframeVersion(ui.viewer, id);
-      updateUrl();
-      setStatus("", false);
-    }
-
-    /**
-     * Load both compare panes.
-     */
-    async function loadCompare() {
-      const leftId = ui.compareLeft.value;
-      const rightId = ui.compareRight.value;
-      const left = getVersion(leftId);
-      const right = getVersion(rightId);
-      if (!left || !right) throw new Error("Unknown compare versions");
-
-      ui.compareLeftLabel.textContent = left.label;
-      ui.compareRightLabel.textContent = right.label;
-      updateMeta(right);
-      setStatus(`Loading ${left.label} and ${right.label}…`, true);
-
-      await Promise.all([
-        setIframeVersion(ui.viewerLeft, leftId),
-        setIframeVersion(ui.viewerRight, rightId),
-      ]);
-
-      wireSyncScroll();
       updateUrl();
       setStatus("", false);
     }
@@ -825,15 +1321,18 @@
     async function setCompareMode(enabled) {
       compareMode = enabled;
       document.body.classList.toggle("compare-mode", enabled);
+      document.body.classList.toggle("highlight-on", enabled && highlightMode);
       ui.compareBtn.classList.toggle("active", enabled);
       ui.compareBtn.setAttribute("aria-pressed", String(enabled));
       ui.compareBtn.textContent = enabled ? "Exit compare" : "Compare";
+      syncHighlightChrome();
 
       if (enabled) {
-        if (manifest.versions.length < 2) {
+        if (visibleVersions().length < 2) {
           setStatus("Need at least two versions to compare.", true);
           compareMode = false;
           document.body.classList.remove("compare-mode");
+          document.body.classList.remove("highlight-on");
           ui.compareBtn.classList.remove("active");
           ui.compareBtn.setAttribute("aria-pressed", "false");
           ui.compareBtn.textContent = "Compare";
@@ -844,6 +1343,7 @@
         fillSelect(ui.compareRight, right);
         await loadCompare();
       } else {
+        document.body.classList.remove("highlight-on");
         await loadVersion(activeId || productionId());
       }
     }
@@ -869,7 +1369,8 @@
 
         const initialId = resolveInitialVersion();
         const version = getVersion(initialId);
-        await materializeVersionHtml(version, password);
+        const html = await materializeVersionHtml(version, password);
+        htmlCache[initialId] = html;
 
         sessionPassword = password;
         sessionStorage.setItem(SESSION_KEY, password);
@@ -948,6 +1449,15 @@
       } catch (err) {
         console.error(err);
         setStatus("Could not open compare view.", true);
+      }
+    });
+
+    ui.highlightChanges.addEventListener("change", async () => {
+      try {
+        await setHighlightMode(ui.highlightChanges.checked);
+      } catch (err) {
+        console.error(err);
+        setStatus("Could not update highlights.", true);
       }
     });
 
