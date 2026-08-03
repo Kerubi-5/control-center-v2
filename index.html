@@ -476,7 +476,7 @@
           Highlight changes
         </label>
         <div class="diff-legend" id="diff-legend" aria-label="Change colors">
-          <span class="swatch"><span class="chip changed" aria-hidden="true"></span> Pink = changed</span>
+          <span class="swatch"><span class="chip changed" aria-hidden="true"></span> Pink = new / changed</span>
         </div>
         <label class="sync-label" title="Keep both sides scrolling together">
           <input type="checkbox" id="sync-scroll" checked>
@@ -505,7 +505,7 @@
             <span class="tag" id="compare-right-tag">After</span>
           </div>
           <iframe id="viewer-right" title="Later version" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"></iframe>
-          <div class="compare-hint" id="compare-hint">Pink marks what changed vs the left version</div>
+          <div class="compare-hint" id="compare-hint">Pink outlines mark new UI vs the left version</div>
         </div>
       </div>
     </div>
@@ -854,40 +854,6 @@
     }
 
     /**
-     * Capture options for html2canvas inside a sketch iframe document.
-     * @param {Document} doc
-     */
-    function captureOptions(doc) {
-      const width = Math.max(
-        doc.documentElement.scrollWidth,
-        doc.body.scrollWidth,
-        doc.documentElement.clientWidth,
-        1
-      );
-      const height = Math.max(
-        doc.documentElement.scrollHeight,
-        doc.body.scrollHeight,
-        1
-      );
-      // Cap scale for large sketches so compare stays responsive.
-      const scale = Math.min(1, 1100 / width);
-      return {
-        backgroundColor: "#ffffff",
-        logging: false,
-        useCORS: true,
-        allowTaint: true,
-        imageTimeout: 5000,
-        scale,
-        width,
-        height,
-        windowWidth: width,
-        windowHeight: height,
-        scrollX: 0,
-        scrollY: -(doc.defaultView ? doc.defaultView.pageYOffset : 0),
-      };
-    }
-
-    /**
      * Draw a source canvas onto a white canvas of fixed size and return ImageData.
      * @param {HTMLCanvasElement} source
      * @param {number} width
@@ -906,124 +872,239 @@
     }
 
     /**
-     * Turn raw pixelmatch output into focused pink marks.
-     * Skips full-page "wash" from layout shifts / large data rewrites by only
-     * keeping compact local change cells.
-     * @param {ImageData} diffData
-     * @param {number} width
-     * @param {number} height
-     * @returns {{ image: ImageData, keptPixels: number, totalDiff: number, ratio: number, mode: "focused" | "skipped" | "none" }}
+     * Stable signature for matching comparable blocks across versions.
+     * @param {Element} el
+     * @returns {string}
      */
-    function focusDiffOverlay(diffData, width, height) {
-      const src = diffData.data;
-      const total = Math.max(1, width * height);
-      let totalDiff = 0;
-      for (let i = 3; i < src.length; i += 4) {
-        if (src[i] > 0) totalDiff += 1;
+    function unitKey(el) {
+      if (el.id) return `id:${el.id}`;
+      const kpi = el.querySelector(".kpi-label");
+      if (kpi && kpi.textContent.trim()) {
+        return `kpi:${kpi.textContent.trim().toLowerCase()}`;
       }
-      const ratio = totalDiff / total;
+      const ref = (el.textContent || "").match(/Ref[_\s-]?\d+/i);
+      if (ref) return `ref:${ref[0].replace(/\s+/g, "").toLowerCase()}`;
+      const text = (el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 48).toLowerCase();
+      const cls = typeof el.className === "string" ? el.className.trim() : "";
+      return `node:${el.tagName.toLowerCase()}|${cls}|${text}`;
+    }
 
-      const cell = 48;
-      const cols = Math.max(1, Math.ceil(width / cell));
-      const rows = Math.max(1, Math.ceil(height / cell));
-      const cellRatio = new Float32Array(cols * rows);
-      const keep = new Uint8Array(cols * rows);
+    /**
+     * Collect card/section units we can match between versions.
+     * @param {Document} doc
+     * @returns {Array<{ el: Element, key: string }>}
+     */
+    function collectCompareUnits(doc) {
+      /** @type {Array<{ el: Element, key: string }>} */
+      const units = [];
+      const seen = new Set();
 
-      for (let ry = 0; ry < rows; ry += 1) {
-        for (let cx = 0; cx < cols; cx += 1) {
-          const x0 = cx * cell;
-          const y0 = ry * cell;
-          const x1 = Math.min(width, x0 + cell);
-          const y1 = Math.min(height, y0 + cell);
-          let changed = 0;
-          let count = 0;
-          for (let y = y0; y < y1; y += 1) {
-            for (let x = x0; x < x1; x += 1) {
-              count += 1;
-              if (src[(y * width + x) * 4 + 3] > 0) changed += 1;
-            }
-          }
-          const r = changed / Math.max(1, count);
-          cellRatio[ry * cols + cx] = r;
-          // Local edits only — skip near-total cell replacement (shift/rewrite).
-          if (r >= 0.035 && r <= 0.45) keep[ry * cols + cx] = 1;
-        }
-      }
-
-      // Drop full-width hot bands (classic vertical layout-shift artifact).
-      for (let ry = 0; ry < rows; ry += 1) {
-        let hot = 0;
-        for (let cx = 0; cx < cols; cx += 1) {
-          if (cellRatio[ry * cols + cx] > 0.3) hot += 1;
-        }
-        if (hot / cols >= 0.7) {
-          for (let cx = 0; cx < cols; cx += 1) keep[ry * cols + cx] = 0;
-        }
-      }
-
-      // Light dilation so marks read as blobs, not speckles.
-      const dilate = new Uint8Array(keep);
-      for (let ry = 0; ry < rows; ry += 1) {
-        for (let cx = 0; cx < cols; cx += 1) {
-          if (!keep[ry * cols + cx]) continue;
-          for (let dy = -1; dy <= 1; dy += 1) {
-            for (let dx = -1; dx <= 1; dx += 1) {
-              const nx = cx + dx;
-              const ny = ry + dy;
-              if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
-              // Only dilate into mildly-changed neighbors, not empty chrome.
-              if (cellRatio[ny * cols + nx] >= 0.02) dilate[ny * cols + nx] = 1;
-            }
-          }
-        }
-      }
-
-      let keptCells = 0;
-      for (let i = 0; i < dilate.length; i += 1) if (dilate[i]) keptCells += 1;
-
-      const out = new ImageData(width, height);
-      const dst = out.data;
-      let keptPixels = 0;
-
-      if (keptCells === 0) {
-        return {
-          image: out,
-          keptPixels: 0,
-          totalDiff,
-          ratio,
-          mode: totalDiff === 0 ? "none" : "skipped",
-        };
-      }
-
-      for (let ry = 0; ry < rows; ry += 1) {
-        for (let cx = 0; cx < cols; cx += 1) {
-          if (!dilate[ry * cols + cx]) continue;
-          const x0 = cx * cell;
-          const y0 = ry * cell;
-          const x1 = Math.min(width, x0 + cell);
-          const y1 = Math.min(height, y0 + cell);
-          for (let y = y0; y < y1; y += 1) {
-            for (let x = x0; x < x1; x += 1) {
-              const i = (y * width + x) * 4;
-              const changed = src[i + 3] > 0;
-              // Soft cell wash + stronger mark on actual changed pixels.
-              dst[i] = 255;
-              dst[i + 1] = 64;
-              dst[i + 2] = 160;
-              dst[i + 3] = changed ? 150 : 48;
-              if (changed) keptPixels += 1;
-            }
-          }
-        }
-      }
-
-      return {
-        image: out,
-        keptPixels,
-        totalDiff,
-        ratio,
-        mode: "focused",
+      /**
+       * @param {Element | null} el
+       * @param {string} [forcedKey]
+       */
+      const add = (el, forcedKey) => {
+        if (!el || seen.has(el)) return;
+        seen.add(el);
+        units.push({ el, key: forcedKey || unitKey(el) });
       };
+
+      doc.querySelectorAll(".kpi-card").forEach((el) => add(el));
+
+      for (const rootId of ["pressure-hero", "daily-actions", "weekly-actions"]) {
+        const root = doc.getElementById(rootId);
+        if (!root) continue;
+        [...root.children].forEach((el) => add(el));
+      }
+
+      const grid = doc.getElementById("grid-kpi");
+      if (grid) {
+        [...grid.children].forEach((el) => {
+          if (!el.classList.contains("kpi-card")) add(el);
+        });
+      }
+
+      return units;
+    }
+
+    /**
+     * Child signature for deep added/removed detection inside a matched unit.
+     * @param {Element} el
+     * @returns {string}
+     */
+    function childSignature(el) {
+      if (el.id) return `id:${el.id}`;
+      const cls =
+        typeof el.className === "string"
+          ? el.className
+              .trim()
+              .split(/\s+/)
+              .filter(Boolean)
+              .sort()
+              .join(".")
+          : "";
+      if (/\b(kpi-label|kpi-sub|gauge-wrap)\b/.test(cls)) {
+        return `slot:${el.tagName.toLowerCase()}|${cls}`;
+      }
+      const text = (el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40).toLowerCase();
+      return `node:${el.tagName.toLowerCase()}|${cls}|${text}`;
+    }
+
+    /**
+     * Mark nodes present only on the right (e.g. View 10 quotes CTA).
+     * @param {Element} leftEl
+     * @param {Element} rightEl
+     * @returns {number} added count
+     */
+    function markAddedInUnit(leftEl, rightEl) {
+      const leftChildren = [...leftEl.children];
+      const rightChildren = [...rightEl.children];
+      let added = 0;
+
+      if (leftChildren.length === 0 && rightChildren.length > 0) {
+        for (const child of rightChildren) {
+          child.classList.add("cc-diff-added");
+          added += 1;
+        }
+        return added;
+      }
+
+      /** @type {Map<string, Element[]>} */
+      const leftBySig = new Map();
+      for (const child of leftChildren) {
+        const sig = childSignature(child);
+        if (!leftBySig.has(sig)) leftBySig.set(sig, []);
+        leftBySig.get(sig).push(child);
+      }
+
+      for (const rightChild of rightChildren) {
+        const sig = childSignature(rightChild);
+        const bucket = leftBySig.get(sig);
+        const leftChild = bucket && bucket.length ? bucket.shift() : null;
+        if (!leftChild) {
+          rightChild.classList.add("cc-diff-added");
+          added += 1;
+          continue;
+        }
+        if (leftChild.innerHTML !== rightChild.innerHTML) {
+          added += markAddedInUnit(leftChild, rightChild);
+        }
+      }
+      return added;
+    }
+
+    /**
+     * CSS for selective DOM highlights inside the right sketch.
+     */
+    const SELECTIVE_DIFF_CSS = `
+.cc-diff-added {
+  outline: 3px solid #ff40a0 !important;
+  outline-offset: 3px !important;
+  background-color: rgba(255, 64, 160, 0.16) !important;
+  box-shadow: 0 0 0 6px rgba(255, 64, 160, 0.12) !important;
+  border-radius: 8px;
+}
+.cc-diff-changed {
+  box-shadow: inset 5px 0 0 #ff40a0 !important;
+}
+a.cc-diff-added, button.cc-diff-added {
+  outline-offset: 4px !important;
+}
+`;
+
+    /**
+     * @param {Document} doc
+     */
+    function injectSelectiveDiffStyles(doc) {
+      let style = doc.getElementById("cc-selective-diff-style");
+      if (!style) {
+        style = doc.createElement("style");
+        style.id = "cc-selective-diff-style";
+        (doc.head || doc.documentElement).appendChild(style);
+      }
+      style.textContent = SELECTIVE_DIFF_CSS;
+    }
+
+    /**
+     * Capture a single element (card) for scoped pixel compare.
+     * @param {Element} el
+     * @param {Document} doc
+     */
+    async function captureElement(el, doc) {
+      const rect = el.getBoundingClientRect();
+      const scale = Math.min(1, 700 / Math.max(rect.width, 1));
+      return html2canvas(/** @type {HTMLElement} */ (el), {
+        backgroundColor: "#ffffff",
+        logging: false,
+        useCORS: true,
+        allowTaint: true,
+        scale,
+        width: Math.ceil(rect.width),
+        height: Math.ceil(rect.height),
+        windowWidth: doc.defaultView ? doc.defaultView.innerWidth : undefined,
+        windowHeight: doc.defaultView ? doc.defaultView.innerHeight : undefined,
+      });
+    }
+
+    /**
+     * Pixel-diff one matched card pair and overlay only on that card.
+     * @param {Element} leftEl
+     * @param {Element} rightEl
+     * @param {Document} leftDoc
+     * @param {Document} rightDoc
+     * @returns {Promise<number>} changed pixels kept
+     */
+    async function overlayCardPixelDiff(leftEl, rightEl, leftDoc, rightDoc) {
+      const [leftShot, rightShot] = await Promise.all([
+        captureElement(leftEl, leftDoc),
+        captureElement(rightEl, rightDoc),
+      ]);
+      const width = Math.max(leftShot.width, rightShot.width);
+      const height = Math.max(leftShot.height, rightShot.height);
+      const leftData = imageDataOnCanvas(leftShot, width, height);
+      const rightData = imageDataOnCanvas(rightShot, width, height);
+      const diffData = new ImageData(width, height);
+      const changed = pixelmatch(
+        leftData.data,
+        rightData.data,
+        diffData.data,
+        width,
+        height,
+        { threshold: 0.15, includeAA: false, alpha: 1, diffColor: [255, 64, 160] }
+      );
+      if (changed < 40) return 0;
+
+      // Soften: only keep changed pixels, boost alpha.
+      const d = diffData.data;
+      let kept = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] === 0) continue;
+        d[i] = 255;
+        d[i + 1] = 64;
+        d[i + 2] = 160;
+        d[i + 3] = 130;
+        kept += 1;
+      }
+      if (kept === 0) return 0;
+
+      const host = /** @type {HTMLElement} */ (rightEl);
+      const prevPos = getComputedStyle(host).position;
+      if (prevPos === "static") host.style.position = "relative";
+
+      const old = host.querySelector(":scope > .cc-card-diff-overlay");
+      if (old) old.remove();
+
+      const overlay = rightDoc.createElement("canvas");
+      overlay.className = "cc-card-diff-overlay";
+      overlay.width = width;
+      overlay.height = height;
+      overlay.getContext("2d").putImageData(diffData, 0, 0);
+      overlay.setAttribute(
+        "style",
+        "position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:20;border-radius:inherit;"
+      );
+      host.appendChild(overlay);
+      return kept;
     }
 
     /**
@@ -1046,115 +1127,112 @@
     }
 
     /**
-     * Library-based visual diff (html2canvas + pixelmatch).
-     * Overlays focused pink marks on the right sketch — not a full-page wash.
+     * Selective highlights: match cards/sections by label, mark added nodes
+     * (like View 10 quotes), and pixel-diff only within matched cards so
+     * page-level layout shift does not wash the whole pane.
      * @param {Document} leftDoc
      * @param {Document} rightDoc
      * @param {(step: string) => void} [onProgress]
-     * @returns {Promise<{ pixels: number, mode: string, message: string }>}
+     * @returns {Promise<{ pixels: number, mode: string, message: string, added: number }>}
      */
     async function applyVisualHighlights(leftDoc, rightDoc, onProgress) {
-      if (typeof html2canvas !== "function") {
-        throw new Error("html2canvas failed to load");
-      }
-      if (typeof pixelmatch !== "function") {
-        throw new Error("pixelmatch failed to load");
-      }
-
       const notify = typeof onProgress === "function" ? onProgress : () => {};
 
       for (const doc of [leftDoc, rightDoc]) {
         doc.querySelectorAll(".collapsed").forEach((el) => {
           el.classList.remove("collapsed");
         });
-        const oldOverlay = doc.getElementById("cc-visual-diff-overlay");
-        if (oldOverlay) oldOverlay.remove();
+        doc.querySelectorAll(".cc-diff-added, .cc-diff-changed").forEach((el) => {
+          el.classList.remove("cc-diff-added", "cc-diff-changed");
+        });
+        doc.querySelectorAll(".cc-card-diff-overlay").forEach((el) => el.remove());
         const oldBadge = doc.getElementById("cc-visual-diff-badge");
         if (oldBadge) oldBadge.remove();
+        const oldPageOverlay = doc.getElementById("cc-visual-diff-overlay");
+        if (oldPageOverlay) oldPageOverlay.remove();
         if (doc.defaultView) doc.defaultView.scrollTo(0, 0);
       }
 
-      notify("Preparing pages…");
-      await new Promise((r) => setTimeout(r, 350));
+      notify("Matching sections…");
+      await new Promise((r) => setTimeout(r, 250));
 
-      notify("Capturing before…");
-      const leftShot = await html2canvas(leftDoc.body, captureOptions(leftDoc));
-      notify("Capturing after…");
-      const rightShot = await html2canvas(rightDoc.body, captureOptions(rightDoc));
+      injectSelectiveDiffStyles(rightDoc);
 
-      notify("Comparing pixels…");
-      const width = Math.max(leftShot.width, rightShot.width);
-      const height = Math.max(leftShot.height, rightShot.height);
-      const leftData = imageDataOnCanvas(leftShot, width, height);
-      const rightData = imageDataOnCanvas(rightShot, width, height);
-      const diffData = new ImageData(width, height);
+      const leftUnits = collectCompareUnits(leftDoc);
+      const rightUnits = collectCompareUnits(rightDoc);
+      /** @type {Map<string, Element>} */
+      const leftByKey = new Map();
+      for (const unit of leftUnits) {
+        if (!leftByKey.has(unit.key)) leftByKey.set(unit.key, unit.el);
+      }
 
-      pixelmatch(leftData.data, rightData.data, diffData.data, width, height, {
-        threshold: 0.12,
-        includeAA: false,
-        alpha: 1,
-        diffColor: [255, 64, 160],
-        diffColorAlt: [255, 140, 0],
-      });
+      let added = 0;
+      let changedUnits = 0;
+      /** @type {Array<{ left: Element, right: Element }>} */
+      const pixelPairs = [];
 
-      notify("Focusing local changes…");
-      const focused = focusDiffOverlay(diffData, width, height);
+      for (const unit of rightUnits) {
+        const leftEl = leftByKey.get(unit.key);
+        if (!leftEl) {
+          unit.el.classList.add("cc-diff-added");
+          added += 1;
+          continue;
+        }
+        leftByKey.delete(unit.key);
+        const sameHtml = leftEl.innerHTML === unit.el.innerHTML;
+        const sameClass =
+          String(leftEl.className || "") === String(unit.el.className || "");
+        if (sameHtml && sameClass) continue;
+
+        changedUnits += 1;
+        unit.el.classList.add("cc-diff-changed");
+        if (!sameHtml) {
+          added += markAddedInUnit(leftEl, unit.el);
+          pixelPairs.push({ left: leftEl, right: unit.el });
+        }
+      }
+
+      let pixels = 0;
+      const canPixel =
+        typeof html2canvas === "function" && typeof pixelmatch === "function";
+
+      if (canPixel && pixelPairs.length > 0) {
+        notify(`Comparing ${pixelPairs.length} changed section(s)…`);
+        // Cap work for very large rewrites.
+        const pairs = pixelPairs.slice(0, 12);
+        for (const pair of pairs) {
+          try {
+            pixels += await overlayCardPixelDiff(
+              pair.left,
+              pair.right,
+              leftDoc,
+              rightDoc
+            );
+          } catch (err) {
+            console.warn("Card pixel diff failed", err);
+          }
+        }
+      }
 
       const body = rightDoc.body;
-      if (getComputedStyle(body).position === "static") {
-        body.style.position = "relative";
-      }
-
-      let message = "";
-      if (focused.mode === "none") {
-        message = "No visual differences found";
-      } else if (focused.mode === "skipped") {
+      const hasMarks = added > 0 || changedUnits > 0 || pixels > 0;
+      let mode = "none";
+      let message = "No visual differences found";
+      if (hasMarks) {
+        mode = "focused";
         message =
-          "Large layout/data differences — pink overlay limited. Compare both sides directly.";
-      } else {
-        message = "Pink marks local changes vs the left version";
-      }
-
-      if (focused.mode === "focused" && focused.keptPixels > 0) {
-        const overlay = rightDoc.createElement("canvas");
-        overlay.id = "cc-visual-diff-overlay";
-        overlay.width = width;
-        overlay.height = height;
-        overlay.getContext("2d").putImageData(focused.image, 0, 0);
-
-        const cssW = Math.max(
-          rightDoc.documentElement.scrollWidth,
-          rightDoc.body.scrollWidth,
-          1
-        );
-        const cssH = Math.max(
-          rightDoc.documentElement.scrollHeight,
-          rightDoc.body.scrollHeight,
-          1
-        );
-        overlay.setAttribute(
-          "style",
-          [
-            "position:absolute",
-            "left:0",
-            "top:0",
-            `width:${cssW}px`,
-            `height:${cssH}px`,
-            "pointer-events:none",
-            "z-index:2147483646",
-          ].join(";")
-        );
-        body.appendChild(overlay);
+          added > 0
+            ? "Pink outline marks new UI (e.g. buttons) vs the left version"
+            : "Pink marks changes inside matched sections";
       }
 
       const badge = rightDoc.createElement("div");
       badge.id = "cc-visual-diff-badge";
-      badge.textContent =
-        focused.mode === "focused"
-          ? "Pink = local changes from left"
-          : focused.mode === "skipped"
-            ? "Too different for pink overlay"
-            : "No visual diff";
+      badge.textContent = hasMarks
+        ? added > 0
+          ? "Pink outline = new on this side"
+          : "Pink = changed section"
+        : "No selective diff marks";
       badge.setAttribute(
         "style",
         [
@@ -1174,12 +1252,7 @@
       );
       body.appendChild(badge);
 
-      return {
-        pixels: focused.keptPixels,
-        mode: focused.mode,
-        message,
-        ratio: focused.ratio,
-      };
+      return { pixels: pixels + added, mode, message, added, changedUnits };
     }
 
     /**
@@ -1293,11 +1366,12 @@
           );
           if (ui.compareRightTag) {
             if (result.mode === "focused") {
-              ui.compareRightTag.textContent = "After · changes highlighted";
+              const n = result.added || 0;
+              ui.compareRightTag.textContent =
+                n > 0
+                  ? `After · ${n} new mark${n === 1 ? "" : "s"}`
+                  : "After · changes highlighted";
               ui.compareRightTag.classList.add("highlighted");
-            } else if (result.mode === "skipped") {
-              ui.compareRightTag.textContent = "After · too different";
-              ui.compareRightTag.classList.remove("highlighted");
             } else {
               ui.compareRightTag.textContent = "After · identical";
               ui.compareRightTag.classList.remove("highlighted");
@@ -1306,14 +1380,7 @@
           if (ui.compareHint) {
             ui.compareHint.textContent = result.message;
           }
-          if (result.mode === "skipped") {
-            setStatus(
-              "Large differences detected — pink overlay limited.",
-              true,
-              "Compare both sides directly for the full picture."
-            );
-            setTimeout(() => setStatus("", false), 3500);
-          } else if (result.mode === "none") {
+          if (result.mode === "none") {
             setStatus("No visual differences found between these versions.", true);
             setTimeout(() => setStatus("", false), 2800);
           } else {

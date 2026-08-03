@@ -17,7 +17,7 @@ Clients pick a version from the top bar. **What's new** shows plain-language rel
 **Compare** is opt-in (nothing auto-launches):
 
 1. Side-by-side **Before / After** with optional synced scrolling
-2. **Highlight changes** (on by default) screenshots both rendered sketches ([html2canvas](https://html2canvas.hertzen.com/)), diffs pixels ([pixelmatch](https://github.com/mapbox/pixelmatch)), and paints pink on the right where they differ
+2. **Highlight changes** (on by default) matches sections/cards by label, outlines **new** UI (e.g. a CTA), and runs [html2canvas](https://html2canvas.hertzen.com/) + [pixelmatch](https://github.com/mapbox/pixelmatch) **inside** each changed card so page layout shift does not pink-wash the whole pane
 
 Deep links: `?v=2.6`, `?mode=compare&left=2.5&right=2.6`, `?mode=compare&highlight=1&left=2.5&right=2.6`. Use `highlight=0` to turn the overlay off.
 
