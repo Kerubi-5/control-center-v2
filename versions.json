@@ -1,6 +1,6 @@
 {
-  "latest": "2.5",
-  "production": "2.5",
+  "latest": "2.6",
+  "production": "2.6",
   "github": {
     "owner": "Kerubi-5",
     "repo": "control-center-v2"
@@ -39,6 +39,18 @@
       "notes": [
         "Alternate Alba Leadership Control Centre V3 sketch",
         "Kept separate from the current v2.5 sketch for side-by-side review"
+      ]
+    },
+    {
+      "id": "2.6",
+      "label": "v2.6",
+      "payload": "versions/2.6.json",
+      "released": "2026-08-03",
+      "tag": "v2.6",
+      "notes": [
+        "Top-10 concentration now drills into the exact ten quote rows",
+        "Compliance references are tagged and carried through Quote, Not Booked In, Job and Awaiting PO rows",
+        "Compliance items are promoted above other work in the default priority view"
       ]
     }
   ]
