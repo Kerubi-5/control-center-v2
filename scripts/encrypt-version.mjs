@@ -41,6 +41,17 @@ function toB64(bytes) {
   return Buffer.from(bytes).toString("base64");
 }
 
+function embedData(plaintext, dataPath) {
+  if (!dataPath) return plaintext;
+  const data = readFileSync(resolve(dataPath), "utf8").trim();
+  JSON.parse(data);
+  const injection = `<script>window.__CONTROL_CENTER_PIPELINE__ = ${data};</script>`;
+  if (!plaintext.includes("</head>")) {
+    throw new Error("Cannot embed data: sketch HTML has no </head> element");
+  }
+  return plaintext.replace("</head>", `${injection}</head>`);
+}
+
 async function encryptHtml(plaintext, password) {
   const salt = webcrypto.getRandomValues(new Uint8Array(16));
   const iv = webcrypto.getRandomValues(new Uint8Array(12));
@@ -87,7 +98,8 @@ async function main() {
   if (!args.id || !args.input || !args.password) usage(1);
 
   const inputPath = resolve(args.input);
-  const plaintext = readFileSync(inputPath, "utf8");
+  const source = readFileSync(inputPath, "utf8");
+  const plaintext = embedData(source, args.data);
   const encrypted = await encryptHtml(plaintext, args.password);
 
   const payload = {
