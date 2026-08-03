@@ -532,14 +532,22 @@
       return manifest.versions.find((v) => v.id === id) || null;
     }
 
+    function visibleVersions() {
+      return manifest.versions.filter((version) => !version.hidden);
+    }
+
+    function productionId() {
+      return manifest.production || manifest.latest;
+    }
+
     /**
      * Versions sorted newest-first for dropdowns.
      * @returns {Array<any>}
      */
     function orderedVersions() {
-      return [...manifest.versions].sort((a, b) => {
-        if (a.id === manifest.latest) return -1;
-        if (b.id === manifest.latest) return 1;
+      return [...visibleVersions()].sort((a, b) => {
+        if (a.id === productionId()) return -1;
+        if (b.id === productionId()) return 1;
         return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
       });
     }
@@ -551,7 +559,7 @@
     function resolveInitialVersion() {
       const requested = params.get("v");
       if (requested && getVersion(requested)) return requested;
-      return manifest.latest;
+      return productionId();
     }
 
     /**
@@ -559,17 +567,18 @@
      * @returns {[string, string]}
      */
     function defaultComparePair() {
-      const orderedAsc = [...manifest.versions].sort((a, b) =>
+      const orderedAsc = [...visibleVersions()].sort((a, b) =>
         String(a.id).localeCompare(String(b.id), undefined, { numeric: true })
       );
+      const requestedRight = params.get("right");
       const right =
-        (params.get("right") && getVersion(params.get("right")) && params.get("right")) ||
-        activeId ||
-        manifest.latest;
+        (requestedRight && visibleVersions().some((v) => v.id === requestedRight) && requestedRight) ||
+        (visibleVersions().some((v) => v.id === activeId) && activeId) ||
+        productionId();
       const rightIdx = orderedAsc.findIndex((v) => v.id === right);
       const leftFromParam = params.get("left");
       let left =
-        leftFromParam && getVersion(leftFromParam)
+        leftFromParam && visibleVersions().some((v) => v.id === leftFromParam)
           ? leftFromParam
           : rightIdx > 0
             ? orderedAsc[rightIdx - 1].id
@@ -591,8 +600,8 @@
         const opt = document.createElement("option");
         opt.value = version.id;
         opt.textContent =
-          version.id === manifest.latest
-            ? `${version.label} (latest)`
+          version.id === productionId()
+            ? `${version.label} (production)`
             : version.label;
         select.appendChild(opt);
       }
@@ -600,7 +609,7 @@
     }
 
     function fillVersionSelects() {
-      fillSelect(ui.select, activeId || manifest.latest);
+      fillSelect(ui.select, activeId || productionId());
       const [left, right] = defaultComparePair();
       fillSelect(ui.compareLeft, left);
       fillSelect(ui.compareRight, right);
@@ -611,7 +620,7 @@
      * @param {any} version
      */
     function updateMeta(version) {
-      const isLatest = version.id === manifest.latest;
+      const isLatest = version.id === productionId();
       ui.latestPill.classList.toggle("show", !compareMode && isLatest);
       ui.notesTitle.textContent = `${version.label} — What's new`;
       ui.notesMeta.textContent = version.released
@@ -835,7 +844,7 @@
         fillSelect(ui.compareRight, right);
         await loadCompare();
       } else {
-        await loadVersion(activeId || manifest.latest);
+        await loadVersion(activeId || productionId());
       }
     }
 

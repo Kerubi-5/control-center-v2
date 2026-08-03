@@ -7,11 +7,17 @@ Live: https://kerubi-5.github.io/control-center-v2/
 ## How it works
 
 - `index.html` — unlock gate + version dropdown shell (latest opens by default)
-- `versions.json` — manifest of available versions, release notes, and Git tags
+- `versions.json` — manifest of available versions, production selection, release notes, and Git tags
 - `versions/<id>.json` — AES-GCM encrypted sketch payloads
 - `scripts/encrypt-version.mjs` — helper to add a new encrypted version
 
 Clients pick a version from the top bar. **What's new** shows plain-language release notes. **Compare** opens a side-by-side view of two versions (with optional synced scrolling) so non-technical clients can see UI changes themselves.
+
+## Production and private versions
+
+`production` in `versions.json` is the version that opens by default and is marked as production in the picker. To promote a released version, change only that field, for example `"production": "2.6"`.
+
+Set `"hidden": true` on a version to keep it out of the version and compare pickers. It remains available to anyone with the password and an exact direct link such as `?v=2.5-alt`.
 
 ## Add a new version (e.g. 2.6)
 
@@ -36,7 +42,7 @@ node scripts/encrypt-version.mjs \
 
 `--data` injects the JSON into the encrypted sketch as `window.__CONTROL_CENTER_PIPELINE__`. The sketch should read that value before attempting any local-file fetch fallback.
 
-Then append to `versions.json` (chronological order), set `"latest"`, tag, and push:
+Then append to `versions.json` (chronological order), set `"production"` when the version should become the default, tag, and push:
 
 ```bash
 git add versions/2.6.json versions.json
