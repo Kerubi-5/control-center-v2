@@ -1,5 +1,6 @@
 {
   "latest": "2.5",
+  "production": "2.5",
   "github": {
     "owner": "Kerubi-5",
     "repo": "control-center-v2"
@@ -30,6 +31,7 @@
     },
     {
       "id": "2.5-alt",
+      "hidden": true,
       "label": "v2.5 Alternate · Alba V3",
       "payload": "versions/2.5-alt.json",
       "released": "2026-08-03",
