@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roadmap — Control Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --sky: #e8eef3;
+      --panel: #fbfcfd;
+      --ink: #1e2935;
+      --muted: #5c6b7a;
+      --line: #c5d0da;
+      --here: #2a6f7a;
+      --here-soft: #d5ebef;
+      --next: #3d5a80;
+      --later: #7a8794;
+      --border: #d7e0e8;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(180deg, #f3f7fa 0%, var(--sky) 55%, #e4ebe8 100%);
+      color: var(--ink);
+      font-family: "Source Sans 3", "Segoe UI", sans-serif;
+      font-size: 20px;
+      line-height: 1.6;
+    }
+
+    .top {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 24px;
+      background: rgba(251, 252, 253, 0.92);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+    }
+
+    .brand {
+      font-family: "Fraunces", Georgia, serif;
+      font-weight: 650;
+      font-size: 1.2rem;
+      color: var(--ink);
+      text-decoration: none;
+    }
+
+    .brand:focus-visible,
+    .back:focus-visible {
+      outline: 3px solid var(--here);
+      outline-offset: 3px;
+      border-radius: 4px;
+    }
+
+    .back {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 10px 16px;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--here);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      text-decoration: none;
+    }
+
+    .back:hover {
+      background: var(--here-soft);
+      border-color: #b7d4d9;
+    }
+
+    .wrap {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 56px 24px 88px;
+    }
+
+    .hero {
+      margin-bottom: 52px;
+    }
+
+    .hero-kicker {
+      margin: 0 0 12px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--here);
+    }
+
+    .hero h1 {
+      margin: 0 0 14px;
+      font-family: "Fraunces", Georgia, serif;
+      font-weight: 650;
+      font-size: clamp(2.1rem, 6vw, 2.75rem);
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+    }
+
+    .hero p {
+      margin: 0;
+      font-size: 1.15rem;
+      color: var(--muted);
+      max-width: 32em;
+    }
+
+    .path {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      gap: 20px;
+      align-items: stretch;
+      animation: rise 0.5s ease-out both;
+    }
+
+    .step:nth-child(2) { animation-delay: 0.1s; }
+    .step:nth-child(3) { animation-delay: 0.2s; }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .marker {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid var(--here);
+      background: var(--here-soft);
+      color: var(--here);
+      font-size: 0.8rem;
+      font-weight: 700;
+      display: grid;
+      place-items: center;
+      margin-top: 6px;
+      flex-shrink: 0;
+    }
+
+    .step[data-status="next"] .dot {
+      border-color: var(--next);
+      background: #e8eef5;
+      color: var(--next);
+    }
+
+    .step[data-status="later"] .dot {
+      border-color: var(--line);
+      background: var(--panel);
+      color: var(--later);
+    }
+
+    .connector {
+      flex: 1;
+      width: 2px;
+      min-height: 24px;
+      margin: 10px 0 0;
+      background: var(--line);
+      border-radius: 1px;
+    }
+
+    .step:last-child .connector { display: none; }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px 26px 26px;
+      margin-bottom: 28px;
+      box-shadow: 0 8px 24px rgba(30, 41, 53, 0.04);
+    }
+
+    .status {
+      display: inline-block;
+      margin: 0 0 10px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--here);
+    }
+
+    .step[data-status="next"] .status { color: var(--next); }
+    .step[data-status="later"] .status { color: var(--later); }
+
+    .card h2 {
+      margin: 0 0 14px;
+      font-family: "Fraunces", Georgia, serif;
+      font-weight: 650;
+      font-size: clamp(1.45rem, 4vw, 1.7rem);
+      line-height: 1.25;
+      letter-spacing: -0.015em;
+      color: var(--ink);
+    }
+
+    .card ul {
+      margin: 0 0 18px;
+      padding: 0 0 0 1.15em;
+    }
+
+    .card li {
+      margin-bottom: 8px;
+      color: var(--ink);
+    }
+
+    .card li:last-child { margin-bottom: 0; }
+
+    .unlock {
+      margin: 0;
+      padding: 14px 16px;
+      background: var(--here-soft);
+      border-radius: 10px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      line-height: 1.4;
+      color: var(--ink);
+    }
+
+    .unlock span {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--here);
+    }
+
+    .step[data-status="next"] .unlock {
+      background: #e8eef5;
+    }
+
+    .step[data-status="next"] .unlock span { color: var(--next); }
+
+    .step[data-status="later"] .unlock {
+      background: #eef1f4;
+    }
+
+    .step[data-status="later"] .unlock span { color: var(--later); }
+
+    .note {
+      margin-top: 8px;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    @media (max-width: 560px) {
+      .top { padding: 12px 16px; }
+      .wrap { padding: 40px 16px 72px; }
+      .step {
+        grid-template-columns: 36px 1fr;
+        gap: 14px;
+      }
+      .card {
+        padding: 20px 18px 22px;
+        margin-bottom: 22px;
+      }
+      .dot {
+        width: 24px;
+        height: 24px;
+        font-size: 0.72rem;
+      }
+      body { font-size: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="./index.html">Control Center</a>
+    <a class="back" href="./index.html">← Back to Control Center</a>
+  </header>
+
+  <main class="wrap">
+    <header class="hero">
+      <p class="hero-kicker">Roadmap</p>
+      <h1>The build plan</h1>
+      <p>Three steps, in order. Each one unlocks a clear decision for owners.</p>
+    </header>
+
+    <ol class="path">
+      <li class="step" data-status="here">
+        <div class="marker" aria-hidden="true">
+          <span class="dot">1</span>
+          <span class="connector"></span>
+        </div>
+        <article class="card">
+          <p class="status">You are here</p>
+          <h2>Trust what the gauges say</h2>
+          <ul>
+            <li>Make every owner gauge clickable.</li>
+            <li>Open a side panel that shows the real quotes, jobs, accounts, or records behind the colour.</li>
+            <li>See the source, how fresh the data is, the rule that set the colour, who owns it, and any overrides.</li>
+            <li>We start with a side panel — a popup only if you must decide something and return straight away.</li>
+          </ul>
+          <p class="unlock">
+            <span>Decision this unlocks</span>
+            Click through to the real records behind a colour.
+          </p>
+        </article>
+      </li>
+
+      <li class="step" data-status="next">
+        <div class="marker" aria-hidden="true">
+          <span class="dot">2</span>
+          <span class="connector"></span>
+        </div>
+        <article class="card">
+          <p class="status">Next</p>
+          <h2>See if we have enough people</h2>
+          <ul>
+            <li>Show demand versus available hours by trade or specialty.</li>
+            <li>Look ahead in the windows owners already use: now, 0–3 months, 3–6 months, and 6–12 months.</li>
+            <li>Answer one question: do we hire, move people, or protect capacity?</li>
+            <li>Keep the labels clear and provisional until planned demand, estimates, available hours, and hiring lead time are proven.</li>
+          </ul>
+          <p class="unlock">
+            <span>Decision this unlocks</span>
+            Hire, redeploy, or protect capacity.
+          </p>
+        </article>
+      </li>
+
+      <li class="step" data-status="later">
+        <div class="marker" aria-hidden="true">
+          <span class="dot">3</span>
+          <span class="connector"></span>
+        </div>
+        <article class="card">
+          <p class="status">Later</p>
+          <h2>Screen built for decisions</h2>
+          <ul>
+            <li>Keep the time-first reading order you already know.</li>
+            <li>Rearrange the layout around the few decisions an owner must make — not around data piles.</li>
+            <li>Every visible gauge must answer four things: What is happening? Why this colour? What decision is expected? Who owns the next move?</li>
+          </ul>
+          <p class="unlock">
+            <span>Decision this unlocks</span>
+            Every gauge answers what / why / decide / who.
+          </p>
+        </article>
+      </li>
+    </ol>
+
+    <p class="note">Proposed dashboard roadmap — not yet applied to the live sketches.</p>
+  </main>
+</body>
+</html>

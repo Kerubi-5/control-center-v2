@@ -256,7 +256,12 @@
       font-weight: 600;
       cursor: pointer;
       white-space: nowrap;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
     }
+
+    a.bar-btn { line-height: 1; }
 
     .bar-btn:hover { background: rgba(88, 166, 255, 0.1); }
     .bar-btn.active {
@@ -486,6 +491,7 @@
 
       <button class="bar-btn" id="compare-btn" type="button" aria-pressed="false">Compare</button>
       <button class="bar-btn" id="notes-btn" type="button" aria-expanded="false">What's new</button>
+      <a class="bar-btn" href="./roadmap.html">Roadmap</a>
     </header>
 
     <div class="viewer-wrap">
