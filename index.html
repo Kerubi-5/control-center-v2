@@ -491,7 +491,7 @@
 
       <button class="bar-btn" id="compare-btn" type="button" aria-pressed="false">Compare</button>
       <button class="bar-btn" id="notes-btn" type="button" aria-expanded="false">What's new</button>
-      <a class="bar-btn" href="./roadmap.html">Roadmap</a>
+      <a class="bar-btn" id="roadmap-link" href="./roadmap.html" hidden>Roadmap</a>
     </header>
 
     <div class="viewer-wrap">
@@ -528,6 +528,11 @@
   <script>
     const SESSION_KEY = "cc_v2_session_password";
     const params = new URLSearchParams(window.location.search);
+    /**
+     * Unlock hidden picker versions and the Roadmap link.
+     * Use ?enable-flag=true (direct links like ?v=2.5-alt still work without it).
+     */
+    const enableFlag = params.get("enable-flag") === "true";
 
     const gate = {
       password: document.getElementById("password"),
@@ -552,6 +557,7 @@
       notesTitle: document.getElementById("notes-title"),
       notesMeta: document.getElementById("notes-meta"),
       notesList: document.getElementById("notes-list"),
+      roadmapLink: document.getElementById("roadmap-link"),
       status: document.getElementById("status"),
       statusText: document.getElementById("status-text"),
       statusDetail: document.getElementById("status-detail"),
@@ -559,6 +565,10 @@
       viewerLeft: document.getElementById("viewer-left"),
       viewerRight: document.getElementById("viewer-right"),
     };
+
+    if (enableFlag) {
+      ui.roadmapLink.hidden = false;
+    }
 
     /** @type {{ latest: string, versions: Array<any> } | null} */
     let manifest = null;
@@ -652,6 +662,7 @@
     }
 
     function visibleVersions() {
+      if (enableFlag) return manifest.versions;
       return manifest.versions.filter((version) => !version.hidden);
     }
 
@@ -1459,6 +1470,11 @@ a.cc-diff-added, button.cc-diff-added {
         url.searchParams.delete("highlight");
         url.searchParams.delete("view");
         if (activeId) url.searchParams.set("v", activeId);
+      }
+      if (enableFlag) {
+        url.searchParams.set("enable-flag", "true");
+      } else {
+        url.searchParams.delete("enable-flag");
       }
       history.replaceState(null, "", url);
     }

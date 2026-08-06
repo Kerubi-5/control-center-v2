@@ -13,6 +13,12 @@ if (!alternate || alternate.hidden !== true) {
 if (!page.includes('function visibleVersions()')) {
   throw new Error('Picker must filter hidden versions through visibleVersions()');
 }
+if (!page.includes('enable-flag') || !page.includes('if (enableFlag) return manifest.versions;')) {
+  throw new Error('enable-flag must reveal hidden versions in pickers');
+}
+if (!page.includes('id="roadmap-link"') || !page.includes('roadmapLink.hidden = false')) {
+  throw new Error('Roadmap link must stay hidden unless enable-flag is set');
+}
 if (!page.includes('function productionId()') || !page.includes('return manifest.production || manifest.latest;')) {
   throw new Error('Production version resolver is missing');
 }

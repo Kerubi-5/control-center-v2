@@ -21,6 +21,8 @@ Clients pick a version from the top bar. **What's new** shows plain-language rel
 
 Deep links: `?v=2.6`, `?mode=compare&left=2.5&right=2.6`, `?mode=compare&highlight=1&left=2.5&right=2.6`. Use `highlight=0` to turn the overlay off.
 
+`?enable-flag=true` shows everything normally hidden: alternate versions in the pickers, and the Roadmap top-bar link. Without it, hidden versions stay direct-link only (`?v=2.5-alt`) and Roadmap stays off the bar (page still at `/roadmap.html`).
+
 ## Production and private versions
 
 `production` in `versions.json` is the version that opens by default and is marked as production in the picker. To promote a released version, change only that field, for example `"production": "2.6"`.
